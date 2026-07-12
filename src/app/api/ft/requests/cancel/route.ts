@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     .eq('id', requestId)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // クーポンを使っていた場合は使用回数を戻す
+  // チケットを使っていた場合は使用回数を戻す
   if (request.coupon_id) {
     const { data: coupon } = await supabaseAdmin
       .from('ft_coupons')

@@ -324,7 +324,7 @@ export default function ReserveCalendarPage() {
               </div>
               <div className="flex-1">
                 <label className="block text-sm text-gray-600 mb-1">
-                  クーポンコード（任意）
+                  チケットコード（任意）
                 </label>
                 <input
                   type="text"

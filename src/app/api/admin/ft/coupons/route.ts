@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 
-// クーポン一覧（管理者用）
+// チケット一覧（管理者用）
 export async function GET(req: NextRequest) {
   const denied = requireAdmin(req)
   if (denied) return denied
@@ -34,7 +34,7 @@ const createSchema = z.object({
   activityId: z.uuid().nullable().optional(), // null = 全区分で使える
 })
 
-// クーポン発行（コードは自動生成）
+// チケット発行（コードは自動生成）
 export async function POST(req: NextRequest) {
   const denied = requireAdmin(req)
   if (denied) return denied
@@ -68,7 +68,7 @@ const patchSchema = z.object({
   isActive: z.boolean(),
 })
 
-// クーポンの有効/無効切り替え
+// チケットの有効/無効切り替え
 export async function PATCH(req: NextRequest) {
   const denied = requireAdmin(req)
   if (denied) return denied

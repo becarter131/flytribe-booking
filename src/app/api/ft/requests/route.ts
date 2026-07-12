@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // クーポンの検証（有効・残回数あり・区分が一致 or 全区分共通）
+  // チケットの検証（有効・残回数あり・区分が一致 or 全区分共通）
   let couponId: string | null = null
   if (couponCode) {
     const { data: coupon } = await supabaseAdmin
@@ -86,16 +86,16 @@ export async function POST(req: NextRequest) {
       .eq('code', couponCode.trim().toUpperCase())
       .maybeSingle()
     if (!coupon || !coupon.is_active) {
-      return NextResponse.json({ error: 'クーポンコードが無効です' }, { status: 400 })
+      return NextResponse.json({ error: 'チケットコードが無効です' }, { status: 400 })
     }
     if (coupon.activity_id && coupon.activity_id !== activity.id) {
       return NextResponse.json(
-        { error: 'このクーポンは別の利用区分専用です' },
+        { error: 'このチケットは別の利用区分専用です' },
         { status: 400 }
       )
     }
     if (coupon.remaining_uses <= 0) {
-      return NextResponse.json({ error: 'このクーポンは使用回数の上限に達しています' }, { status: 400 })
+      return NextResponse.json({ error: 'このチケットは使用回数の上限に達しています' }, { status: 400 })
     }
     couponId = coupon.id
   }
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // クーポンの使用回数を消費（1リクエスト = 1回）
+  // チケットの使用回数を消費（1リクエスト = 1回）
   if (couponId) {
     const { data: coupon } = await supabaseAdmin
       .from('ft_coupons')

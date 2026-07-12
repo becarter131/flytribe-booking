@@ -243,8 +243,8 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* クーポン管理 */}
-        <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">クーポン管理</h2>
+        {/* チケット管理 */}
+        <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">チケット管理</h2>
         <div className="bg-white rounded-2xl shadow p-4 mb-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-40">
@@ -272,7 +272,7 @@ export default function DashboardPage() {
               onClick={createCoupon}
               className="bg-sky-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-sky-700"
             >
-              クーポンを発行
+              チケットを発行
             </button>
           </div>
         </div>
@@ -305,7 +305,7 @@ export default function DashboardPage() {
             </div>
           ))}
           {coupons.length === 0 && (
-            <p className="text-center text-gray-500 py-4 text-sm">クーポンはまだありません</p>
+            <p className="text-center text-gray-500 py-4 text-sm">チケットはまだありません</p>
           )}
         </div>
       </div>
