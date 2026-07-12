@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const [coupons, setCoupons] = useState<FtCoupon[]>([])
   const [couponDesc, setCouponDesc] = useState('')
   const [couponUses, setCouponUses] = useState(10)
+  const [hideUsedUp, setHideUsedUp] = useState(false)
 
   // カレンダー管理
   const now = new Date()
@@ -690,7 +691,18 @@ export default function DashboardPage() {
         )}
 
         {/* チケット管理 */}
-        <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">チケット管理</h2>
+        <div className="flex items-center justify-between mt-10 mb-4">
+          <h2 className="text-xl font-bold text-gray-800">チケット管理</h2>
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hideUsedUp}
+              onChange={(e) => setHideUsedUp(e.target.checked)}
+              className="w-4 h-4 accent-sky-600"
+            />
+            残り0回のチケットを非表示
+          </label>
+        </div>
         <div className="bg-white rounded-2xl shadow p-4 mb-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-40">
@@ -723,7 +735,9 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="space-y-2">
-          {coupons.map((c) => (
+          {coupons
+            .filter((c) => !hideUsedUp || c.remainingUses > 0)
+            .map((c) => (
             <div
               key={c.id}
               className="bg-white rounded-2xl shadow px-4 py-3 flex items-center justify-between gap-4"
