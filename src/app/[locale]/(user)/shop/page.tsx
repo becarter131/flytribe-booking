@@ -17,11 +17,10 @@ interface CourseItem {
 const MACHINE_LABEL = { multicopter: 'マルチコプター', helicopter: 'ヘリコプター' } as const
 const LICENSE_LABEL = { first: '一等', second: '二等' } as const
 const EXPERIENCE_LABEL = { beginner: '初学者', experienced: '経験者' } as const
-const ITEM_LABEL = {
-  basic: '基本料金',
-  night: '夜間オプション',
-  bvlos: '目視外オプション',
-  heavy: '25kg以上オプション',
+const OPTION_LABEL = {
+  night: '夜間 限定解除',
+  bvlos: '目視外 限定解除',
+  heavy: '25kg以上 限定解除',
 } as const
 
 type MachineFilter = 'all' | 'multicopter' | 'helicopter'
@@ -29,12 +28,15 @@ type LicenseFilter = 'all' | 'first' | 'second'
 type ExperienceFilter = 'all' | 'beginner' | 'experienced'
 
 // 国家資格講座チケットの購入ショップ
+// 基本講習を選び、対応する限定解除をオプションとして追加購入できる
 export default function ShopPage() {
   const router = useRouter()
   const [items, setItems] = useState<CourseItem[]>([])
   const [machine, setMachine] = useState<MachineFilter>('all')
   const [license, setLicense] = useState<LicenseFilter>('all')
   const [experience, setExperience] = useState<ExperienceFilter>('all')
+  // 基本講習ごとに選択中のオプションIDを保持
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [buyingId, setBuyingId] = useState<string | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -46,19 +48,35 @@ export default function ShopPage() {
     void load()
   }, [])
 
-  const buy = async (item: CourseItem) => {
+  const toggleOption = (basicId: string, optionId: string) => {
+    setSelectedOptions((prev) => {
+      const current = prev[basicId] ?? []
+      return {
+        ...prev,
+        [basicId]: current.includes(optionId)
+          ? current.filter((id) => id !== optionId)
+          : [...current, optionId],
+      }
+    })
+  }
+
+  const buy = async (basic: CourseItem) => {
     setApiError(null)
     const userId = localStorage.getItem('ftUserId')
     if (!userId) {
       router.push('/ja/register')
       return
     }
-    setBuyingId(item.id)
+    setBuyingId(basic.id)
     try {
       const res = await fetch('/api/ft/shop/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseItemId: item.id, userId }),
+        body: JSON.stringify({
+          basicItemId: basic.id,
+          optionItemIds: selectedOptions[basic.id] ?? [],
+          userId,
+        }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -73,12 +91,25 @@ export default function ShopPage() {
     setBuyingId(null)
   }
 
-  const filtered = items.filter(
+  const basics = items.filter(
     (i) =>
+      i.itemType === 'basic' &&
       (machine === 'all' || i.machine === machine) &&
       (license === 'all' || i.license === license) &&
       (experience === 'all' || i.experience === experience)
   )
+  const optionsFor = (b: CourseItem) =>
+    items.filter(
+      (i) =>
+        i.itemType !== 'basic' &&
+        i.machine === b.machine &&
+        i.license === b.license &&
+        i.experience === b.experience
+    )
+  const totalFor = (b: CourseItem) => {
+    const opts = optionsFor(b).filter((o) => (selectedOptions[b.id] ?? []).includes(o.id))
+    return b.priceJpy + opts.reduce((s, o) => s + o.priceJpy, 0)
+  }
 
   const chip = (active: boolean) =>
     `text-sm px-3 py-1.5 rounded-full border transition-colors ${
@@ -95,8 +126,9 @@ export default function ShopPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-800 mt-4 mb-1">チケット購入ショップ</h1>
         <p className="text-sm text-gray-500 mb-4">
-          国家資格講座のチケットを購入できます。購入するとチケットコードが発行され、
-          講座の予約時に入力してご利用いただけます。※料金は全て税込
+          基本講習を選び、必要な限定解除をオプションとして追加できます。
+          購入するとチケットコードが発行され、講座の予約時に入力してご利用いただけます。
+          ※料金は全て税込
         </p>
 
         {/* フィルター */}
@@ -166,40 +198,73 @@ export default function ShopPage() {
           </p>
         )}
 
-        {/* チケット一覧 */}
-        <div className="space-y-3">
-          {filtered.map((i) => (
-            <div key={i.id} className="bg-white rounded-2xl p-5 shadow-md">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="font-semibold text-gray-800 text-sm">
-                    【{MACHINE_LABEL[i.machine]}】{LICENSE_LABEL[i.license]}・
-                    {EXPERIENCE_LABEL[i.experience]}
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    {ITEM_LABEL[i.itemType]}
-                    {i.itemType === 'basic' && i.days != null && (
-                      <span className="text-xs text-gray-400 ml-1">（受講{i.days}日）</span>
-                    )}
-                  </p>
-                  <p className="text-sky-700 font-bold mt-1">
-                    {i.priceJpy.toLocaleString()}円
-                  </p>
-                </div>
+        {/* 基本講習 + オプション */}
+        <div className="space-y-4">
+          {basics.map((b) => {
+            const options = optionsFor(b)
+            const selected = selectedOptions[b.id] ?? []
+            return (
+              <div key={b.id} className="bg-white rounded-2xl p-5 shadow-md">
+                <h2 className="font-semibold text-gray-800">
+                  【{MACHINE_LABEL[b.machine]}】{LICENSE_LABEL[b.license]}無人航空機操縦士コース
+                  <span className="text-sm font-normal text-gray-500 ml-1">
+                    （{EXPERIENCE_LABEL[b.experience]}）
+                  </span>
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  基本講習
+                  {b.days != null && (
+                    <span className="text-xs text-gray-400 ml-1">（受講{b.days}日）</span>
+                  )}
+                  <span className="text-sky-700 font-bold ml-2">
+                    {b.priceJpy.toLocaleString()}円
+                  </span>
+                </p>
+
+                {/* 限定解除オプション */}
+                {options.length > 0 && (
+                  <div className="mt-3 border-t border-gray-100 pt-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-500">
+                      限定解除オプション（追加できます）
+                    </p>
+                    {options.map((o) => (
+                      <label
+                        key={o.id}
+                        className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(o.id)}
+                          onChange={() => toggleOption(b.id, o.id)}
+                          className="w-4 h-4 accent-sky-600"
+                        />
+                        <span>
+                          {OPTION_LABEL[o.itemType as keyof typeof OPTION_LABEL]}
+                          <span className="text-gray-500 ml-1">
+                            +{o.priceJpy.toLocaleString()}円
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => buy(i)}
+                  onClick={() => buy(b)}
                   disabled={buyingId !== null}
-                  className="shrink-0 bg-sky-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-sky-700 disabled:opacity-50"
+                  className="w-full mt-4 bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 disabled:opacity-50"
                 >
-                  {buyingId === i.id ? '処理中...' : '購入する'}
+                  {buyingId === b.id
+                    ? '処理中...'
+                    : `購入する（合計 ${totalFor(b).toLocaleString()}円）`}
                 </button>
               </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
+            )
+          })}
+          {basics.length === 0 && (
             <p className="text-gray-500 text-sm text-center py-8 bg-white rounded-2xl border border-dashed border-gray-300">
-              該当するチケットがありません
+              該当するコースがありません
             </p>
           )}
         </div>

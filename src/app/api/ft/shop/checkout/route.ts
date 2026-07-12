@@ -2,64 +2,105 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getStripe } from '@/lib/stripe'
-import { courseItemLabel } from '@/lib/course-labels'
+import { courseItemLabel, ITEM_TYPE_LABEL } from '@/lib/course-labels'
 
 const schema = z.object({
-  courseItemId: z.uuid(),
+  basicItemId: z.uuid(),                        // 基本講習（必須）
+  optionItemIds: z.array(z.uuid()).max(3).optional().default([]), // 限定解除オプション
   userId: z.uuid(),
 })
 
-// 講座チケットの購入: Stripe Checkout で決済し、完了時に webhook でチケットコードを発行する
+// 講座チケットの購入: 基本講習 + 選択した限定解除オプションをまとめて1回で決済する
 export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json())
   if (!parsed.success) {
     return NextResponse.json({ error: '入力内容を確認してください' }, { status: 400 })
   }
-  const { courseItemId, userId } = parsed.data
+  const { basicItemId, optionItemIds, userId } = parsed.data
 
   const stripe = getStripe()
   if (!stripe) {
     return NextResponse.json({ error: '決済機能が設定されていません' }, { status: 500 })
   }
 
-  const [{ data: item }, { data: user }] = await Promise.all([
+  const [{ data: basic }, { data: user }] = await Promise.all([
     supabaseAdmin
       .from('ft_course_items')
       .select('*')
-      .eq('id', courseItemId)
+      .eq('id', basicItemId)
       .eq('is_active', true)
       .single(),
     supabaseAdmin.from('ft_users').select('*').eq('id', userId).single(),
   ])
-  if (!item) return NextResponse.json({ error: 'チケットが見つかりません' }, { status: 404 })
+  if (!basic || basic.item_type !== 'basic') {
+    return NextResponse.json({ error: '基本講習を選択してください' }, { status: 400 })
+  }
   if (!user) return NextResponse.json({ error: '利用者登録が必要です' }, { status: 400 })
+
+  // オプションの検証: 同じ機体・等級・区分の限定解除のみ許可
+  const options: typeof basic[] = []
+  for (const optionId of optionItemIds) {
+    const { data: option } = await supabaseAdmin
+      .from('ft_course_items')
+      .select('*')
+      .eq('id', optionId)
+      .eq('is_active', true)
+      .single()
+    if (
+      !option ||
+      option.item_type === 'basic' ||
+      option.machine !== basic.machine ||
+      option.license !== basic.license ||
+      option.experience !== basic.experience
+    ) {
+      return NextResponse.json(
+        { error: '選択したオプションはこの基本講習に追加できません' },
+        { status: 400 }
+      )
+    }
+    options.push(option)
+  }
+
+  const items = [basic, ...options]
+  const total = items.reduce((s, i) => s + i.price_jpy, 0)
 
   const { data: order, error } = await supabaseAdmin
     .from('ft_ticket_orders')
     .insert({
       user_id: userId,
-      course_item_id: courseItemId,
-      price_jpy: item.price_jpy,
+      course_item_id: basic.id,
+      price_jpy: total,
     })
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  await supabaseAdmin.from('ft_ticket_order_items').insert(
+    items.map((i) => ({
+      order_id: order.id,
+      course_item_id: i.id,
+      price_jpy: i.price_jpy,
+    }))
+  )
 
   const proto = req.headers.get('x-forwarded-proto') ?? 'http'
   const origin = req.headers.get('origin') ?? `${proto}://${req.headers.get('host')}`
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    line_items: [
-      {
-        price_data: {
-          currency: 'jpy',
-          product_data: { name: `講座チケット: ${courseItemLabel(item)}` },
-          unit_amount: item.price_jpy,
+    line_items: items.map((i) => ({
+      price_data: {
+        currency: 'jpy',
+        product_data: {
+          name:
+            i.item_type === 'basic'
+              ? `講座チケット: ${courseItemLabel(i)}`
+              : `限定解除オプション: ${ITEM_TYPE_LABEL[i.item_type]}`,
         },
-        quantity: 1,
+        unit_amount: i.price_jpy,
       },
-    ],
+      quantity: 1,
+    })),
     customer_email: user.email,
     metadata: { ftTicketOrderId: order.id },
     success_url: `${origin}/ja/shop/success/${order.id}`,
