@@ -54,7 +54,8 @@ export default function MyTicketsPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-800 mt-4 mb-1">🎫 マイチケット</h1>
         <p className="text-sm text-gray-500 mb-6">
-          購入済みのチケットコード一覧です。予約時に「チケットコード」欄へ入力してご利用ください。
+          購入済み・ご利用中のチケットコード一覧です。予約時に「チケットコード」欄へ入力してご利用ください。
+          受付停止などで予約が取り消された場合、チケットは自動で再利用可能になります。
         </p>
 
         {tickets === null ? (
@@ -88,7 +89,11 @@ export default function MyTicketsPage() {
                             : 'bg-gray-200 text-gray-500'
                         }`}
                       >
-                        {usable(t) ? '未使用' : '使用済み'}
+                        {!usable(t)
+                          ? '使用済み'
+                          : t.remainingUses > 1
+                            ? `利用可能（残り${t.remainingUses}回）`
+                            : '利用可能'}
                       </span>
                       {t.activityName && (
                         <span className="text-xs text-gray-500">{t.activityName}</span>

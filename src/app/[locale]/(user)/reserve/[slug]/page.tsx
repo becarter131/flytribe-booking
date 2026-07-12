@@ -23,8 +23,14 @@ interface MyRequest {
   id: string
   date: string
   partySize: number
-  status: 'active' | 'cancelled'
+  status: 'active' | 'cancelled' | 'rejected'
   couponCode: string | null
+}
+
+const REQUEST_STATUS_LABEL: Record<MyRequest['status'], string> = {
+  active: '受付中',
+  cancelled: 'キャンセル済み',
+  rejected: '受付停止（チケットは再利用可）',
 }
 
 const STATE_STYLE: Record<FtDateState, string> = {
@@ -367,7 +373,7 @@ export default function ReserveCalendarPage() {
                   <span className="text-gray-700">
                     {r.date} · {r.partySize}
                     {unit} ·{' '}
-                    {r.status === 'cancelled' ? 'キャンセル済み' : '受付中'}
+                    {REQUEST_STATUS_LABEL[r.status] ?? r.status}
                     {r.couponCode && (
                       <span className="font-mono text-xs text-sky-600 ml-1">
                         ({r.couponCode})

@@ -136,5 +136,32 @@ export async function PATCH(req: NextRequest) {
       { onConflict: 'activity_id,date' }
     )
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // 受付停止にした場合: その日の申込を「受付停止」扱いにし、使用済みチケットの回数を戻す
+  if (operatorStatus === 'rejected') {
+    const { data: affected } = await supabaseAdmin
+      .from('ft_requests')
+      .select('id, coupon_id')
+      .eq('activity_id', activityId)
+      .eq('date', date)
+      .eq('status', 'active')
+    for (const r of affected ?? []) {
+      await supabaseAdmin.from('ft_requests').update({ status: 'rejected' }).eq('id', r.id)
+      if (r.coupon_id) {
+        const { data: coupon } = await supabaseAdmin
+          .from('ft_coupons')
+          .select('remaining_uses')
+          .eq('id', r.coupon_id)
+          .single()
+        if (coupon) {
+          await supabaseAdmin
+            .from('ft_coupons')
+            .update({ remaining_uses: coupon.remaining_uses + 1 })
+            .eq('id', r.coupon_id)
+        }
+      }
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }

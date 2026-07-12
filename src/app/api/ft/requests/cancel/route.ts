@@ -25,6 +25,13 @@ export async function POST(req: NextRequest) {
   if (request.status === 'cancelled') {
     return NextResponse.json({ error: 'すでにキャンセル済みです' }, { status: 400 })
   }
+  // 受付停止時にチケット回数は返却済みのため、二重返却を防ぐ
+  if (request.status === 'rejected') {
+    return NextResponse.json(
+      { error: 'この予約は受付停止により取り消し済みです（チケットは再利用できます）' },
+      { status: 400 }
+    )
+  }
 
   const { error } = await supabaseAdmin
     .from('ft_requests')
