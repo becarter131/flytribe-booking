@@ -8,6 +8,14 @@ import { z } from 'zod'
 const schema = z.object({
   name: z.string().min(1, { error: 'お名前を入力してください' }).max(100),
   email: z.email({ error: 'メールアドレスの形式が正しくありません' }),
+  phone: z
+    .string()
+    .min(8, { error: '電話番号を入力してください' })
+    .max(20, { error: '電話番号が長すぎます' })
+    .regex(/^[0-9+\-() ]+$/, { error: '電話番号の形式が正しくありません' }),
+  birthdate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { error: '生年月日を入力してください' }),
 })
 
 type FormData = z.infer<typeof schema>
@@ -61,6 +69,25 @@ export default function RegisterPage() {
             </label>
             <input {...register('email')} type="email" className={inputClass} />
             {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">電話番号</label>
+            <input
+              {...register('phone')}
+              type="tel"
+              placeholder="090-0000-0000"
+              className={inputClass}
+            />
+            {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">生年月日</label>
+            <input {...register('birthdate')} type="date" className={inputClass} />
+            {errors.birthdate && (
+              <p className="text-red-500 text-sm mt-1">{errors.birthdate.message}</p>
+            )}
           </div>
 
           {apiError && (

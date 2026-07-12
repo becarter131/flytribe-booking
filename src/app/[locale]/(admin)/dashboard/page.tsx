@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 interface RequestDetail {
   userName: string | null
   userEmail: string | null
+  userPhone: string | null
   partySize: number
   couponCode: string | null
   createdAt: string
@@ -507,6 +508,9 @@ export default function DashboardPage() {
                         >
                           <span className="font-medium">{r.userName ?? '（不明）'}</span>
                           <span className="text-gray-500 text-xs">{r.userEmail}</span>
+                          {r.userPhone && (
+                            <span className="text-gray-500 text-xs">📞 {r.userPhone}</span>
+                          )}
                           <span>
                             {r.partySize}
                             {unit}

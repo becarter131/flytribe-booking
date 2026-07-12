@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from('ft_requests')
       .select(
-        'id, activity_id, date, party_size, status, created_at, user:ft_users(name, email), coupon:ft_coupons(code)'
+        'id, activity_id, date, party_size, status, created_at, user:ft_users(name, email, phone), coupon:ft_coupons(code)'
       )
       .gte('date', today),
     supabaseAdmin
@@ -30,18 +30,19 @@ export async function GET(req: NextRequest) {
   const counts = new Map<string, number>()
   const details = new Map<
     string,
-    { userName: string | null; userEmail: string | null; partySize: number; couponCode: string | null; createdAt: string }[]
+    { userName: string | null; userEmail: string | null; userPhone: string | null; partySize: number; couponCode: string | null; createdAt: string }[]
   >()
   for (const r of requests ?? []) {
     if (r.status !== 'active') continue
     const key = `${r.activity_id}|${r.date}`
     counts.set(key, (counts.get(key) ?? 0) + r.party_size)
-    const user = r.user as unknown as { name: string; email: string } | null
+    const user = r.user as unknown as { name: string; email: string; phone: string | null } | null
     const coupon = r.coupon as unknown as { code: string } | null
     const list = details.get(key) ?? []
     list.push({
       userName: user?.name ?? null,
       userEmail: user?.email ?? null,
+      userPhone: user?.phone ?? null,
       partySize: r.party_size,
       couponCode: coupon?.code ?? null,
       createdAt: r.created_at,
