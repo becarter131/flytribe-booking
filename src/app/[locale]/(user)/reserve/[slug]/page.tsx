@@ -138,7 +138,10 @@ export default function ReserveCalendarPage() {
         setMessage(
           body.state === 'confirmed'
             ? `🎉 ${selected} の利用が確定しました！`
-            : `✅ ${selected} で仮予約を受け付けました（現在 ${body.count} ${unit} / 確定は ${activity?.minParticipants} ${unit}〜）`
+            : `✅ ${selected} で予約申込を受け付けました（現在 ${body.count} ${unit}）。` +
+                ((activity?.minParticipants ?? 1) > 1
+                  ? `最低催行人数（${activity?.minParticipants}${unit}）に達し、管理者が承認すると確定します`
+                  : '管理者が承認すると確定します')
         )
         setSelected(null)
         setCouponCode('')
@@ -193,9 +196,8 @@ export default function ReserveCalendarPage() {
         {activity && (
           <p className="text-sm text-gray-500 mb-4">
             {activity.minParticipants > 1
-              ? `${activity.minParticipants}${unit}以上で開催確定`
-              : 'ご予約で確定'}
-            {activity.maxParticipants && `（定員 ${activity.maxParticipants}${unit}）`}
+              ? `予約申込後、最低催行人数に達し、管理者の承認をもって予約確定となります（最低催行人数 ${activity.minParticipants}${unit}${activity.maxParticipants ? `・定員 ${activity.maxParticipants}${unit}` : ''}）`
+              : '予約申込後、管理者の承認をもって予約確定となります'}
           </p>
         )}
 

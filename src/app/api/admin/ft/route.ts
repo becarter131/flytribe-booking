@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest) {
   }
   const { activityId, date, operatorStatus } = parsed.data
 
-  // 承認する場合: 同日に他区分の確定があると二重確定になるためブロック
+  // 承認する場合: 最低催行人数チェック + 同日に他区分の確定があると二重確定になるためブロック
   if (operatorStatus === 'approved') {
     const [{ data: activities }, { data: requests }, { data: dates }] = await Promise.all([
       supabaseAdmin.from('ft_activities').select('*').eq('is_active', true),
@@ -99,14 +99,27 @@ export async function PATCH(req: NextRequest) {
         .eq('date', date),
       supabaseAdmin.from('ft_dates').select('activity_id, operator_status').eq('date', date),
     ])
+    const countOf = (id: string) =>
+      (requests ?? [])
+        .filter((r) => r.activity_id === id && r.status === 'active')
+        .reduce((s, r) => s + r.party_size, 0)
+
+    const own = (activities ?? []).find((a) => a.id === activityId)
+    if (own && countOf(activityId) < own.min_participants) {
+      const unit = own.slug === 'charter' ? '社' : '名'
+      return NextResponse.json(
+        {
+          error: `最低催行人数（${own.min_participants}${unit}）に達していないため確定にできません`,
+        },
+        { status: 400 }
+      )
+    }
+
     const conflict = (activities ?? []).some((a) => {
       if (a.id === activityId) return false
-      const count = (requests ?? [])
-        .filter((r) => r.activity_id === a.id && r.status === 'active')
-        .reduce((s, r) => s + r.party_size, 0)
       const op =
         (dates ?? []).find((d) => d.activity_id === a.id)?.operator_status ?? 'none'
-      return computeOwnState(count, a.min_participants, op) === 'confirmed'
+      return computeOwnState(countOf(a.id), a.min_participants, op) === 'confirmed'
     })
     if (conflict) {
       return NextResponse.json(

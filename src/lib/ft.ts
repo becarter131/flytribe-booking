@@ -5,14 +5,14 @@
 export type FtDateState = 'blank' | 'tentative' | 'confirmed' | 'rejected' | 'occupied'
 
 // 区分単体の状態（他区分の影響を含まない）
+// 予約確定は人数だけでは成立せず、管理者の承認（approved）が必要
 export function computeOwnState(
   participantCount: number,
-  minParticipants: number,
+  _minParticipants: number,
   operatorStatus: 'none' | 'approved' | 'rejected'
 ): Exclude<FtDateState, 'occupied'> {
   if (operatorStatus === 'rejected') return 'rejected'
   if (operatorStatus === 'approved') return 'confirmed'
-  if (participantCount >= minParticipants) return 'confirmed'
   if (participantCount > 0) return 'tentative'
   return 'blank'
 }
