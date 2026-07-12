@@ -6,7 +6,7 @@ import { routing } from '@/i18n/routing'
 import '../globals.css'
 
 export const metadata: Metadata = {
-  title: 'フライトライブ予約システム | FlyTribe Booking',
+  title: 'フライトライブ予約システム',
   description: 'ドローン飛行場の利用予約システム（貸切業務・国家資格講座・飛行会）',
 }
 
