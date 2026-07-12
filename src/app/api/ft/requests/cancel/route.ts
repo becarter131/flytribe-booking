@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const { data: request } = await supabaseAdmin
     .from('ft_requests')
-    .select('id, status, coupon_id')
+    .select('id, status, coupon_id, activity_id, date')
     .eq('id', requestId)
     .eq('user_id', userId)
     .single()
@@ -29,6 +29,19 @@ export async function POST(req: NextRequest) {
   if (request.status === 'rejected') {
     return NextResponse.json(
       { error: 'この予約は受付停止により取り消し済みです（チケットは再利用できます）' },
+      { status: 400 }
+    )
+  }
+  // 管理者承認済み（確定）の日はキャンセル不可
+  const { data: dateRow } = await supabaseAdmin
+    .from('ft_dates')
+    .select('operator_status')
+    .eq('activity_id', request.activity_id)
+    .eq('date', request.date)
+    .maybeSingle()
+  if (dateRow?.operator_status === 'approved') {
+    return NextResponse.json(
+      { error: '確定済みの予約はキャンセルできません' },
       { status: 400 }
     )
   }

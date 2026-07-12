@@ -24,12 +24,21 @@ export async function GET(req: NextRequest) {
     .eq('activity_id', activity.id)
     .order('date')
 
+  // 管理者承認済み（確定）の日付を取得し、各予約に反映する
+  const { data: approvedDates } = await supabaseAdmin
+    .from('ft_dates')
+    .select('date')
+    .eq('activity_id', activity.id)
+    .eq('operator_status', 'approved')
+  const approved = new Set((approvedDates ?? []).map((d) => d.date))
+
   return NextResponse.json({
     requests: (requests ?? []).map((r) => ({
       id: r.id,
       date: r.date,
       partySize: r.party_size,
       status: r.status,
+      confirmed: r.status === 'active' && approved.has(r.date),
       couponCode: (r.coupon as unknown as { code: string } | null)?.code ?? null,
     })),
   })

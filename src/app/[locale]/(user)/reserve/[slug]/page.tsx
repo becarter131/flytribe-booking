@@ -24,6 +24,7 @@ interface MyRequest {
   date: string
   partySize: number
   status: 'active' | 'cancelled' | 'rejected'
+  confirmed: boolean
   couponCode: string | null
 }
 
@@ -373,14 +374,16 @@ export default function ReserveCalendarPage() {
                   <span className="text-gray-700">
                     {r.date} · {r.partySize}
                     {unit} ·{' '}
-                    {REQUEST_STATUS_LABEL[r.status] ?? r.status}
+                    {r.confirmed
+                      ? '予約確定済（キャンセル不可）'
+                      : (REQUEST_STATUS_LABEL[r.status] ?? r.status)}
                     {r.couponCode && (
                       <span className="font-mono text-xs text-sky-600 ml-1">
                         ({r.couponCode})
                       </span>
                     )}
                   </span>
-                  {r.status === 'active' && (
+                  {r.status === 'active' && !r.confirmed && (
                     <button
                       type="button"
                       onClick={() => cancelRequest(r.id)}
