@@ -41,12 +41,48 @@ export async function POST(req: NextRequest) {
         .update({ status: 'paid', stripe_payment_intent_id: paymentIntentId })
         .eq('id', orderId)
         .eq('status', 'pending')
-        .select('id, user_id, course_item_id')
+        .select('id, user_id, course_item_id, shop_product_id')
         .single()
 
       if (error) {
         // 500 を返すと Stripe が自動リトライする
         return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      // ===== 利用券（飛行会・貸切）: 商品の回数分使えるチケットを発行 =====
+      if (order?.shop_product_id) {
+        const { data: product } = await supabaseAdmin
+          .from('ft_shop_products')
+          .select('*')
+          .eq('id', order.shop_product_id)
+          .single()
+        const { data: activity } = await supabaseAdmin
+          .from('ft_activities')
+          .select('id')
+          .eq('slug', product?.activity_slug ?? '')
+          .single()
+
+        const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+        const code =
+          'FT-' + Array.from({ length: 8 }, () => chars[randomInt(chars.length)]).join('')
+        const { data: coupon, error: couponError } = await supabaseAdmin
+          .from('ft_coupons')
+          .insert({
+            code,
+            description: `購入チケット: ${product?.name ?? '利用券'}`,
+            activity_id: activity?.id ?? null,
+            remaining_uses: product?.uses ?? 1,
+          })
+          .select('id')
+          .single()
+        if (couponError) {
+          return NextResponse.json({ error: couponError.message }, { status: 500 })
+        }
+        await supabaseAdmin
+          .from('ft_ticket_orders')
+          .update({ coupon_id: coupon.id })
+          .eq('id', order.id)
+        return NextResponse.json({ received: true })
       }
 
       if (order) {

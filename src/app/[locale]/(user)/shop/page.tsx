@@ -23,6 +23,16 @@ const OPTION_LABEL = {
   heavy: '25kg以上 限定解除',
 } as const
 
+interface ShopProduct {
+  id: string
+  name: string
+  activitySlug: 'meetup' | 'charter'
+  uses: number
+  priceJpy: number
+}
+
+const PRODUCT_ICON: Record<string, string> = { meetup: '🚁', charter: '🏢' }
+
 type MachineFilter = 'all' | 'multicopter' | 'helicopter'
 type LicenseFilter = 'all' | 'first' | 'second'
 type ExperienceFilter = 'all' | 'beginner' | 'experienced'
@@ -32,6 +42,7 @@ type ExperienceFilter = 'all' | 'beginner' | 'experienced'
 export default function ShopPage() {
   const router = useRouter()
   const [items, setItems] = useState<CourseItem[]>([])
+  const [products, setProducts] = useState<ShopProduct[]>([])
   const [machine, setMachine] = useState<MachineFilter>('all')
   const [license, setLicense] = useState<LicenseFilter>('all')
   const [experience, setExperience] = useState<ExperienceFilter>('all')
@@ -42,11 +53,42 @@ export default function ShopPage() {
 
   useEffect(() => {
     const load = async () => {
-      const res = await fetch('/api/ft/course-items')
-      if (res.ok) setItems(await res.json())
+      const [itemsRes, productsRes] = await Promise.all([
+        fetch('/api/ft/course-items'),
+        fetch('/api/ft/shop/products'),
+      ])
+      if (itemsRes.ok) setItems(await itemsRes.json())
+      if (productsRes.ok) setProducts(await productsRes.json())
     }
     void load()
   }, [])
+
+  const buyProduct = async (product: ShopProduct) => {
+    setApiError(null)
+    const userId = localStorage.getItem('ftUserId')
+    if (!userId) {
+      router.push('/ja/register')
+      return
+    }
+    setBuyingId(product.id)
+    try {
+      const res = await fetch('/api/ft/shop/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopProductId: product.id, userId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setApiError(body.error ?? `エラーが発生しました (${res.status})`)
+      } else if (body.checkoutUrl) {
+        window.location.assign(body.checkoutUrl)
+        return
+      }
+    } catch (e) {
+      setApiError(`通信エラー: ${String(e)}`)
+    }
+    setBuyingId(null)
+  }
 
   const toggleOption = (basicId: string, optionId: string) => {
     setSelectedOptions((prev) => {
@@ -196,6 +238,42 @@ export default function ShopPage() {
           <p className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
             {apiError}
           </p>
+        )}
+
+        {/* 利用券（飛行会・貸切） */}
+        {products.length > 0 && (
+          <>
+            <h2 className="font-bold text-gray-700 mb-2">利用券</h2>
+            <div className="space-y-3 mb-6">
+              {products.map((p) => (
+                <div key={p.id} className="bg-white rounded-2xl p-5 shadow-md">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-semibold text-gray-800">
+                        {PRODUCT_ICON[p.activitySlug]} {p.name}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {p.activitySlug === 'meetup' ? '飛行会' : '貸切業務'}の予約に
+                        {p.uses > 1 ? `${p.uses}回` : '1回'}使えます
+                      </p>
+                      <p className="text-sky-700 font-bold mt-1">
+                        {p.priceJpy.toLocaleString()}円
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => buyProduct(p)}
+                      disabled={buyingId !== null}
+                      className="shrink-0 bg-sky-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      {buyingId === p.id ? '処理中...' : '購入する'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <h2 className="font-bold text-gray-700 mb-2">国家資格講座チケット</h2>
+          </>
         )}
 
         {/* 基本講習 + オプション */}
