@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getSupabaseServer } from '@/lib/supabase-server'
 import type { FtActivity } from '@/types'
+import AuthButtons from './AuthButtons'
 
 const ICONS: Record<string, string> = {
   charter: '🏢',
@@ -18,8 +19,9 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-100">
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <h1 className="text-4xl font-bold text-sky-800 mb-4">フライトライブ予約システム</h1>
+      <div className="max-w-2xl mx-auto px-4 py-8 text-center">
+        <AuthButtons />
+        <h1 className="text-4xl font-bold text-sky-800 mt-6 mb-4">フライトライブ予約システム</h1>
         <p className="text-lg text-gray-600 mb-12">
           AICHI AIR BASEのご利用予約はこちらから。利用にはチケットが必要です。
         </p>
