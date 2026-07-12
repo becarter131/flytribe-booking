@@ -136,23 +136,24 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const { error } = await supabaseAdmin
-    .from('ft_dates')
-    .upsert(
-      { activity_id: activityId, date, operator_status: operatorStatus },
-      { onConflict: 'activity_id,date' }
-    )
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-
-  const { data: targetActivity } = await supabaseAdmin
-    .from('ft_activities')
-    .select('name')
-    .eq('id', activityId)
-    .single()
-  const activityName = targetActivity?.name ?? '利用区分'
-
-  // 確定にした場合: その日の申込者全員へ確定メールを送る
+  // ===== 確定（対象の区分のみ） =====
   if (operatorStatus === 'approved') {
+    const { error } = await supabaseAdmin
+      .from('ft_dates')
+      .upsert(
+        { activity_id: activityId, date, operator_status: 'approved' },
+        { onConflict: 'activity_id,date' }
+      )
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    const { data: targetActivity } = await supabaseAdmin
+      .from('ft_activities')
+      .select('name')
+      .eq('id', activityId)
+      .single()
+    const activityName = targetActivity?.name ?? '利用区分'
+
+    // その日の申込者全員へ確定メールを送る
     const { data: confirmed } = await supabaseAdmin
       .from('ft_requests')
       .select('user:ft_users(name, email)')
@@ -173,19 +174,35 @@ export async function PATCH(req: NextRequest) {
         ])
       )
     }
+    return NextResponse.json({ ok: true })
   }
 
-  // 受付停止にした場合: その日の申込を「受付停止」扱いにし、使用済みチケットの回数を戻す
+  // ===== 受付停止（全区分が対象） =====
   if (operatorStatus === 'rejected') {
+    const { data: allActivities } = await supabaseAdmin
+      .from('ft_activities')
+      .select('id, name')
+      .eq('is_active', true)
+    const nameOf = new Map((allActivities ?? []).map((a) => [a.id, a.name as string]))
+
+    const { error } = await supabaseAdmin.from('ft_dates').upsert(
+      (allActivities ?? []).map((a) => ({
+        activity_id: a.id,
+        date,
+        operator_status: 'rejected',
+      })),
+      { onConflict: 'activity_id,date' }
+    )
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // 全区分の申込を「受付停止」扱いにし、使用済みチケットの回数を戻す
     const { data: affected } = await supabaseAdmin
       .from('ft_requests')
-      .select('id, user:ft_users(name, email)')
-      .eq('activity_id', activityId)
+      .select('id, activity_id, user:ft_users(name, email)')
       .eq('date', date)
       .eq('status', 'active')
     for (const r of affected ?? []) {
       await supabaseAdmin.from('ft_requests').update({ status: 'rejected' }).eq('id', r.id)
-      // 使用したチケットの回数をすべて戻す
       const { data: usedCoupons } = await supabaseAdmin
         .from('ft_request_coupons')
         .select('coupon_id, uses')
@@ -205,6 +222,7 @@ export async function PATCH(req: NextRequest) {
       }
       const user = r.user as unknown as { name: string; email: string } | null
       if (user?.email) {
+        const activityName = nameOf.get(r.activity_id) ?? '利用区分'
         await sendMail(
           user.email,
           `【受付停止のお知らせ】${date} ${activityName}`,
@@ -218,7 +236,16 @@ export async function PATCH(req: NextRequest) {
         )
       }
     }
+    return NextResponse.json({ ok: true })
   }
+
+  // ===== 停止の取り消し（全区分の受付停止を解除。確定は変更しない） =====
+  const { error } = await supabaseAdmin
+    .from('ft_dates')
+    .update({ operator_status: 'none' })
+    .eq('date', date)
+    .eq('operator_status', 'rejected')
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   return NextResponse.json({ ok: true })
 }

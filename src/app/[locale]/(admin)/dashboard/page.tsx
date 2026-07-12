@@ -241,7 +241,12 @@ export default function DashboardPage() {
     }
     if (operatorStatus === 'rejected') {
       return confirm(
-        `${date} の「${activityName}」を受付停止にします。よろしいですか？\n（この日の申込はすべて取り消され、使用されたチケットは返却されます）`
+        `${date} を受付停止にします。よろしいですか？\n（3種類すべての利用区分が受付停止になり、この日の申込はすべて取り消され、使用されたチケットは返却されます）`
+      )
+    }
+    if (operatorStatus === 'none') {
+      return confirm(
+        `${date} の受付停止を取り消します。よろしいですか？\n（全区分の受付停止が解除されます。取り消された申込は元に戻りません）`
       )
     }
     return true
@@ -274,20 +279,24 @@ export default function DashboardPage() {
     setCalBusy(false)
   }
 
-  const calStopAll = async () => {
-    if (!calSelected) return
-    if (
-      !confirm(
-        `${calSelected} の全区分を受付停止にします。よろしいですか？\n（この日の申込はすべて取り消され、使用されたチケットは返却されます）`
-      )
-    )
-      return
+  // 受付停止は日付単位（API側で全区分に適用される）
+  const calStopDay = async () => {
+    if (!calSelected || calActivities.length === 0) return
+    if (!confirmStatusChange(calSelected, '', 'rejected')) return
     setActionError(null)
     setCalBusy(true)
-    for (const a of calActivities) {
-      const ok = await patchStatus(a.id, calSelected, 'rejected')
-      if (!ok) break
-    }
+    await patchStatus(calActivities[0].id, calSelected, 'rejected')
+    await fetchCalendar()
+    fetchRows(password)
+    setCalBusy(false)
+  }
+
+  const calLiftDay = async () => {
+    if (!calSelected || calActivities.length === 0) return
+    if (!confirmStatusChange(calSelected, '', 'none')) return
+    setActionError(null)
+    setCalBusy(true)
+    await patchStatus(calActivities[0].id, calSelected, 'none')
     await fetchCalendar()
     fetchRows(password)
     setCalBusy(false)
@@ -574,7 +583,8 @@ export default function DashboardPage() {
           カレンダー管理（受付停止の設定）
         </h2>
         <p className="text-sm text-gray-500 mb-3">
-          日付を選ぶと利用区分ごとの状態を確認でき、受付停止の設定・解除ができます。
+          日付を選ぶと利用区分ごとの状態を確認できます。
+          受付停止は日付単位で、<strong>3種類すべての利用区分</strong>が一括で停止になります。
           確定済みの日付も天候不順などの際に受付停止へ変更できます。
         </p>
         <div className="bg-white rounded-2xl shadow p-4 mb-4">
@@ -649,14 +659,27 @@ export default function DashboardPage() {
               <h3 className="font-semibold text-gray-800">
                 <span className="text-sky-700">{calSelected}</span> の状態
               </h3>
-              <button
-                type="button"
-                onClick={calStopAll}
-                disabled={calBusy}
-                className="text-sm bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50"
-              >
-                全区分を受付停止
-              </button>
+              {calActivities.some(
+                (a) => calDays[calSelected]?.[a.slug]?.state === 'rejected'
+              ) ? (
+                <button
+                  type="button"
+                  onClick={calLiftDay}
+                  disabled={calBusy}
+                  className="text-sm bg-gray-500 text-white px-3 py-1.5 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+                >
+                  受付停止を取り消す
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={calStopDay}
+                  disabled={calBusy}
+                  className="text-sm bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  この日を受付停止にする（全区分）
+                </button>
+              )}
             </div>
             <div className="space-y-2">
               {calActivities.map((a) => {
@@ -692,26 +715,6 @@ export default function DashboardPage() {
                           className="text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
                           確定にする
-                        </button>
-                      )}
-                      {state !== 'rejected' && (
-                        <button
-                          type="button"
-                          onClick={() => calSetStatus(a.id, 'rejected')}
-                          disabled={calBusy}
-                          className="text-xs bg-red-500 text-white px-2.5 py-1 rounded-lg hover:bg-red-600 disabled:opacity-50"
-                        >
-                          受付停止
-                        </button>
-                      )}
-                      {state === 'rejected' && (
-                        <button
-                          type="button"
-                          onClick={() => calSetStatus(a.id, 'none')}
-                          disabled={calBusy}
-                          className="text-xs bg-gray-500 text-white px-2.5 py-1 rounded-lg hover:bg-gray-600 disabled:opacity-50"
-                        >
-                          停止を取り消す
                         </button>
                       )}
                     </div>
