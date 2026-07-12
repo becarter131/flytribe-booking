@@ -19,6 +19,11 @@ export async function POST(req: NextRequest) {
   }
   const { activitySlug, userId, date, partySize, couponCode } = parsed.data
 
+  // チケットコードは全区分で必須
+  if (!couponCode?.trim()) {
+    return NextResponse.json({ error: 'チケットコードを入力してください' }, { status: 400 })
+  }
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   if (new Date(`${date}T00:00:00`) < today) {
@@ -70,35 +75,33 @@ export async function POST(req: NextRequest) {
   }
 
   const current = countOf(activity.id)
+  const unit = activity.slug === 'charter' ? '社' : '名'
   if (activity.max_participants && current + partySize > activity.max_participants) {
     return NextResponse.json(
-      { error: `この日の残り枠は ${activity.max_participants - current} 名です` },
+      { error: `この日の残り枠は ${activity.max_participants - current} ${unit}です` },
       { status: 400 }
     )
   }
 
   // チケットの検証（有効・残回数あり・区分が一致 or 全区分共通）
-  let couponId: string | null = null
-  if (couponCode) {
-    const { data: coupon } = await supabaseAdmin
-      .from('ft_coupons')
-      .select('*')
-      .eq('code', couponCode.trim().toUpperCase())
-      .maybeSingle()
-    if (!coupon || !coupon.is_active) {
-      return NextResponse.json({ error: 'チケットコードが無効です' }, { status: 400 })
-    }
-    if (coupon.activity_id && coupon.activity_id !== activity.id) {
-      return NextResponse.json(
-        { error: 'このチケットは別の利用区分専用です' },
-        { status: 400 }
-      )
-    }
-    if (coupon.remaining_uses <= 0) {
-      return NextResponse.json({ error: 'このチケットは使用回数の上限に達しています' }, { status: 400 })
-    }
-    couponId = coupon.id
+  const { data: coupon } = await supabaseAdmin
+    .from('ft_coupons')
+    .select('*')
+    .eq('code', couponCode.trim().toUpperCase())
+    .maybeSingle()
+  if (!coupon || !coupon.is_active) {
+    return NextResponse.json({ error: 'チケットコードが無効です' }, { status: 400 })
   }
+  if (coupon.activity_id && coupon.activity_id !== activity.id) {
+    return NextResponse.json(
+      { error: 'このチケットは別の利用区分専用です' },
+      { status: 400 }
+    )
+  }
+  if (coupon.remaining_uses <= 0) {
+    return NextResponse.json({ error: 'このチケットは使用回数の上限に達しています' }, { status: 400 })
+  }
+  const couponId: string = coupon.id
 
   const { error } = await supabaseAdmin.from('ft_requests').insert({
     activity_id: activity.id,
@@ -110,19 +113,10 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   // チケットの使用回数を消費（1リクエスト = 1回）
-  if (couponId) {
-    const { data: coupon } = await supabaseAdmin
-      .from('ft_coupons')
-      .select('remaining_uses')
-      .eq('id', couponId)
-      .single()
-    if (coupon) {
-      await supabaseAdmin
-        .from('ft_coupons')
-        .update({ remaining_uses: Math.max(0, coupon.remaining_uses - 1) })
-        .eq('id', couponId)
-    }
-  }
+  await supabaseAdmin
+    .from('ft_coupons')
+    .update({ remaining_uses: Math.max(0, coupon.remaining_uses - 1) })
+    .eq('id', couponId)
 
   const newState = applyCrossBlock(
     computeOwnState(current + partySize, activity.min_participants, operatorOf(activity.id)),

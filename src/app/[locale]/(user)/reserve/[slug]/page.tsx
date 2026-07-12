@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import type { FtDateState } from '@/lib/ft'
-import CourseItems from './CourseItems'
 
 interface DayInfo {
   count: number
@@ -45,6 +44,8 @@ function ymd(d: Date): string {
 export default function ReserveCalendarPage() {
   const { slug } = useParams<{ locale: string; slug: string }>()
   const router = useRouter()
+  // 貸切業務利用は会社単位で数えるため単位を「社」にする
+  const unit = slug === 'charter' ? '社' : '名'
 
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
@@ -113,6 +114,10 @@ export default function ReserveCalendarPage() {
       router.push('/ja/register')
       return
     }
+    if (!couponCode.trim()) {
+      setApiError('チケットコードを入力してください（チケットはショップで購入できます）')
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/ft/requests', {
@@ -123,7 +128,7 @@ export default function ReserveCalendarPage() {
           userId,
           date: selected,
           partySize,
-          ...(couponCode.trim() && { couponCode: couponCode.trim() }),
+          couponCode: couponCode.trim(),
         }),
       })
       const body = await res.json().catch(() => ({}))
@@ -133,7 +138,7 @@ export default function ReserveCalendarPage() {
         setMessage(
           body.state === 'confirmed'
             ? `🎉 ${selected} の利用が確定しました！`
-            : `✅ ${selected} で仮予約を受け付けました（現在 ${body.count} 名 / 確定は ${activity?.minParticipants} 名〜）`
+            : `✅ ${selected} で仮予約を受け付けました（現在 ${body.count} ${unit} / 確定は ${activity?.minParticipants} ${unit}〜）`
         )
         setSelected(null)
         setCouponCode('')
@@ -188,14 +193,11 @@ export default function ReserveCalendarPage() {
         {activity && (
           <p className="text-sm text-gray-500 mb-4">
             {activity.minParticipants > 1
-              ? `${activity.minParticipants}名以上で開催確定`
+              ? `${activity.minParticipants}${unit}以上で開催確定`
               : 'ご予約で確定'}
-            {activity.maxParticipants && `（定員 ${activity.maxParticipants}名）`}
+            {activity.maxParticipants && `（定員 ${activity.maxParticipants}${unit}）`}
           </p>
         )}
-
-        {/* 国家資格講座のみ: コース内容・料金表 */}
-        {slug === 'course' && <CourseItems />}
 
         {/* 凡例 */}
         <div className="flex flex-wrap gap-3 text-xs text-gray-600 mb-3">
@@ -278,7 +280,7 @@ export default function ReserveCalendarPage() {
                       {info.count}
                       {activity && activity.minParticipants > 1
                         ? `/${activity.minParticipants}`
-                        : '名'}
+                        : unit}
                     </span>
                   )}
                   {state === 'occupied' && (
@@ -309,7 +311,9 @@ export default function ReserveCalendarPage() {
             </h2>
             <div className="flex items-end gap-3 mb-3">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">人数</label>
+                <label className="block text-sm text-gray-600 mb-1">
+                  {slug === 'charter' ? '社数' : '人数'}
+                </label>
                 <select
                   value={partySize}
                   onChange={(e) => setPartySize(Number(e.target.value))}
@@ -317,17 +321,19 @@ export default function ReserveCalendarPage() {
                 >
                   {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                     <option key={n} value={n}>
-                      {n}名
+                      {n}
+                      {unit}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="flex-1">
                 <label className="block text-sm text-gray-600 mb-1">
-                  チケットコード（任意）
+                  チケットコード（必須）
                 </label>
                 <input
                   type="text"
+                  required
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                   placeholder="FT-XXXXXXXX"
@@ -357,7 +363,8 @@ export default function ReserveCalendarPage() {
                   className="flex items-center justify-between text-sm border border-gray-200 rounded-lg px-3 py-2"
                 >
                   <span className="text-gray-700">
-                    {r.date} · {r.partySize}名 ·{' '}
+                    {r.date} · {r.partySize}
+                    {unit} ·{' '}
                     {r.status === 'cancelled' ? 'キャンセル済み' : '受付中'}
                     {r.couponCode && (
                       <span className="font-mono text-xs text-sky-600 ml-1">
