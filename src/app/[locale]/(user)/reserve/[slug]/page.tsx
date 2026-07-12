@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import type { FtDateState } from '@/lib/ft'
+import CourseItems from './CourseItems'
 
 interface DayInfo {
   count: number
@@ -192,6 +193,9 @@ export default function ReserveCalendarPage() {
             {activity.maxParticipants && `（定員 ${activity.maxParticipants}名）`}
           </p>
         )}
+
+        {/* 国家資格講座のみ: コース内容・料金表 */}
+        {slug === 'course' && <CourseItems />}
 
         {/* 凡例 */}
         <div className="flex flex-wrap gap-3 text-xs text-gray-600 mb-3">
