@@ -8,6 +8,7 @@ import { z } from 'zod'
 
 const schema = z.object({
   name: z.string().min(1, { error: 'お名前を入力してください' }).max(100),
+  companyName: z.string().max(100).optional(),
   email: z.email({ error: 'メールアドレスの形式が正しくありません' }),
   phone: z
     .string()
@@ -66,6 +67,17 @@ export default function RegisterPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">お名前</label>
             <input {...register('name')} className={inputClass} />
             {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              法人名（法人の場合）
+            </label>
+            <input
+              {...register('companyName')}
+              placeholder="株式会社◯◯"
+              className={inputClass}
+            />
           </div>
 
           <div>
