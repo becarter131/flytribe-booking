@@ -22,7 +22,7 @@ export default async function HomePage() {
         <h1 className="text-4xl font-bold text-sky-800 mb-2">フライトライブ予約システム</h1>
         <p className="font-mono text-sm text-sky-600 mb-4">FlyTribe Booking</p>
         <p className="text-lg text-gray-600 mb-12">
-          ドローン飛行場のご利用予約はこちらから
+          AICHI AIR BASEのご利用予約はこちらから。利用にはチケットが必要です。
         </p>
 
         <div className="space-y-4 mb-12">
