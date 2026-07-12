@@ -1,0 +1,209 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+
+interface CourseItem {
+  id: string
+  machine: 'multicopter' | 'helicopter'
+  license: 'first' | 'second'
+  experience: 'beginner' | 'experienced'
+  itemType: 'basic' | 'night' | 'bvlos' | 'heavy'
+  days: number | null
+  priceJpy: number
+}
+
+const MACHINE_LABEL = { multicopter: 'マルチコプター', helicopter: 'ヘリコプター' } as const
+const LICENSE_LABEL = { first: '一等', second: '二等' } as const
+const EXPERIENCE_LABEL = { beginner: '初学者', experienced: '経験者' } as const
+const ITEM_LABEL = {
+  basic: '基本料金',
+  night: '夜間オプション',
+  bvlos: '目視外オプション',
+  heavy: '25kg以上オプション',
+} as const
+
+type MachineFilter = 'all' | 'multicopter' | 'helicopter'
+type LicenseFilter = 'all' | 'first' | 'second'
+type ExperienceFilter = 'all' | 'beginner' | 'experienced'
+
+// 国家資格講座チケットの購入ショップ
+export default function ShopPage() {
+  const router = useRouter()
+  const [items, setItems] = useState<CourseItem[]>([])
+  const [machine, setMachine] = useState<MachineFilter>('all')
+  const [license, setLicense] = useState<LicenseFilter>('all')
+  const [experience, setExperience] = useState<ExperienceFilter>('all')
+  const [buyingId, setBuyingId] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch('/api/ft/course-items')
+      if (res.ok) setItems(await res.json())
+    }
+    void load()
+  }, [])
+
+  const buy = async (item: CourseItem) => {
+    setApiError(null)
+    const userId = localStorage.getItem('ftUserId')
+    if (!userId) {
+      router.push('/ja/register')
+      return
+    }
+    setBuyingId(item.id)
+    try {
+      const res = await fetch('/api/ft/shop/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseItemId: item.id, userId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setApiError(body.error ?? `エラーが発生しました (${res.status})`)
+      } else if (body.checkoutUrl) {
+        window.location.assign(body.checkoutUrl)
+        return
+      }
+    } catch (e) {
+      setApiError(`通信エラー: ${String(e)}`)
+    }
+    setBuyingId(null)
+  }
+
+  const filtered = items.filter(
+    (i) =>
+      (machine === 'all' || i.machine === machine) &&
+      (license === 'all' || i.license === license) &&
+      (experience === 'all' || i.experience === experience)
+  )
+
+  const chip = (active: boolean) =>
+    `text-sm px-3 py-1.5 rounded-full border transition-colors ${
+      active
+        ? 'bg-sky-600 text-white border-sky-600'
+        : 'bg-white text-gray-600 border-gray-300 hover:border-sky-400'
+    }`
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-100 px-4 py-8">
+      <div className="max-w-2xl mx-auto">
+        <Link href="/ja" className="text-sm text-gray-500 hover:text-sky-700">
+          ← トップに戻る
+        </Link>
+        <h1 className="text-2xl font-bold text-gray-800 mt-4 mb-1">チケット購入ショップ</h1>
+        <p className="text-sm text-gray-500 mb-4">
+          国家資格講座のチケットを購入できます。購入するとチケットコードが発行され、
+          講座の予約時に入力してご利用いただけます。※料金は全て税込
+        </p>
+
+        {/* フィルター */}
+        <div className="space-y-2 mb-4">
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setMachine('all')} className={chip(machine === 'all')}>
+              全機体
+            </button>
+            <button
+              type="button"
+              onClick={() => setMachine('multicopter')}
+              className={chip(machine === 'multicopter')}
+            >
+              マルチコプター
+            </button>
+            <button
+              type="button"
+              onClick={() => setMachine('helicopter')}
+              className={chip(machine === 'helicopter')}
+            >
+              ヘリコプター
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setLicense('all')} className={chip(license === 'all')}>
+              一等・二等
+            </button>
+            <button type="button" onClick={() => setLicense('first')} className={chip(license === 'first')}>
+              一等
+            </button>
+            <button
+              type="button"
+              onClick={() => setLicense('second')}
+              className={chip(license === 'second')}
+            >
+              二等
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setExperience('all')}
+              className={chip(experience === 'all')}
+            >
+              初学者・経験者
+            </button>
+            <button
+              type="button"
+              onClick={() => setExperience('beginner')}
+              className={chip(experience === 'beginner')}
+            >
+              初学者
+            </button>
+            <button
+              type="button"
+              onClick={() => setExperience('experienced')}
+              className={chip(experience === 'experienced')}
+            >
+              経験者
+            </button>
+          </div>
+        </div>
+
+        {apiError && (
+          <p className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+            {apiError}
+          </p>
+        )}
+
+        {/* チケット一覧 */}
+        <div className="space-y-3">
+          {filtered.map((i) => (
+            <div key={i.id} className="bg-white rounded-2xl p-5 shadow-md">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold text-gray-800 text-sm">
+                    【{MACHINE_LABEL[i.machine]}】{LICENSE_LABEL[i.license]}・
+                    {EXPERIENCE_LABEL[i.experience]}
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-0.5">
+                    {ITEM_LABEL[i.itemType]}
+                    {i.itemType === 'basic' && i.days != null && (
+                      <span className="text-xs text-gray-400 ml-1">（受講{i.days}日）</span>
+                    )}
+                  </p>
+                  <p className="text-sky-700 font-bold mt-1">
+                    {i.priceJpy.toLocaleString()}円
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => buy(i)}
+                  disabled={buyingId !== null}
+                  className="shrink-0 bg-sky-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {buyingId === i.id ? '処理中...' : '購入する'}
+                </button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-gray-500 text-sm text-center py-8 bg-white rounded-2xl border border-dashed border-gray-300">
+              該当するチケットがありません
+            </p>
+          )}
+        </div>
+      </div>
+    </main>
+  )
+}

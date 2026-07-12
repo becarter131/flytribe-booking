@@ -46,6 +46,21 @@ export default async function HomePage() {
           ))}
         </div>
 
+        {/* チケット購入ショップへの入口 */}
+        <Link
+          href="/ja/shop"
+          className="block bg-sky-700 text-white rounded-2xl p-5 shadow-md hover:bg-sky-800 transition-colors mb-8"
+        >
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-2xl">🎫</span>
+            <span className="font-bold text-lg">チケット購入ショップ</span>
+            <span>→</span>
+          </div>
+          <p className="text-xs text-sky-100 mt-1">
+            国家資格講座のチケットを事前購入できます
+          </p>
+        </Link>
+
         <p className="text-xs text-gray-500">
           ※ いずれかの利用区分で確定した日は、他の区分ではご予約いただけません
         </p>
