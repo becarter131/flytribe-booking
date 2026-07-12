@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const { data: requests } = await supabaseAdmin
     .from('ft_requests')
-    .select('id, date, party_size, status')
+    .select('id, date, party_size, status, coupon:ft_coupons(code)')
     .eq('user_id', userId)
     .eq('activity_id', activity.id)
     .order('date')
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       date: r.date,
       partySize: r.party_size,
       status: r.status,
+      couponCode: (r.coupon as { code: string } | null)?.code ?? null,
     })),
   })
 }

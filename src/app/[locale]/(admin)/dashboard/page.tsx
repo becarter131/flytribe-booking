@@ -19,6 +19,15 @@ const STATE_LABEL: Record<string, { label: string; color: string }> = {
   blank: { label: '空き', color: 'bg-gray-100 text-gray-600' },
 }
 
+interface FtCoupon {
+  id: string
+  code: string
+  description: string | null
+  activityName: string
+  remainingUses: number
+  isActive: boolean
+}
+
 export default function DashboardPage() {
   const [password, setPassword] = useState<string | null>(null)
   const [passwordInput, setPasswordInput] = useState('')
@@ -27,6 +36,10 @@ export default function DashboardPage() {
   const [sessionChecked, setSessionChecked] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const [coupons, setCoupons] = useState<FtCoupon[]>([])
+  const [couponDesc, setCouponDesc] = useState('')
+  const [couponUses, setCouponUses] = useState(10)
 
   const fetchRows = useCallback(async (pw: string | null) => {
     if (!pw) return false
@@ -38,9 +51,48 @@ export default function DashboardPage() {
       setPassword(null)
       return false
     }
-    if (res.ok) setRows(await res.json())
+    if (res.ok) {
+      setRows(await res.json())
+      const cRes = await fetch('/api/admin/ft/coupons', {
+        headers: { Authorization: `Bearer ${pw}` },
+      })
+      if (cRes.ok) setCoupons(await cRes.json())
+    }
     return res.ok
   }, [])
+
+  const createCoupon = async () => {
+    if (!password) return
+    setActionError(null)
+    const res = await fetch('/api/admin/ft/coupons', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ description: couponDesc || undefined, uses: couponUses }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setActionError(body.error ?? `エラーが発生しました (${res.status})`)
+    } else {
+      setCouponDesc('')
+    }
+    fetchRows(password)
+  }
+
+  const toggleCoupon = async (coupon: FtCoupon) => {
+    if (!password) return
+    await fetch('/api/admin/ft/coupons', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ couponId: coupon.id, isActive: !coupon.isActive }),
+    })
+    fetchRows(password)
+  }
 
   useEffect(() => {
     const restore = async () => {
@@ -188,6 +240,72 @@ export default function DashboardPage() {
           })}
           {rows.length === 0 && (
             <p className="text-center text-gray-500 py-8">予約のある日はまだありません</p>
+          )}
+        </div>
+
+        {/* クーポン管理 */}
+        <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">クーポン管理</h2>
+        <div className="bg-white rounded-2xl shadow p-4 mb-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-40">
+              <label className="block text-sm text-gray-600 mb-1">説明（任意）</label>
+              <input
+                type="text"
+                value={couponDesc}
+                onChange={(e) => setCouponDesc(e.target.value)}
+                placeholder="例: オープン記念 10%オフ"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">使用可能回数</label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={couponUses}
+                onChange={(e) => setCouponUses(Number(e.target.value))}
+                className="w-24 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+            <button
+              onClick={createCoupon}
+              className="bg-sky-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-sky-700"
+            >
+              クーポンを発行
+            </button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {coupons.map((c) => (
+            <div
+              key={c.id}
+              className="bg-white rounded-2xl shadow px-4 py-3 flex items-center justify-between gap-4"
+            >
+              <div>
+                <p className="font-mono font-bold text-gray-800">
+                  {c.code}
+                  {!c.isActive && (
+                    <span className="text-xs font-sans font-medium bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full ml-2">
+                      無効
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {c.description ?? '（説明なし）'} · 対象: {c.activityName} · 残り{' '}
+                  {c.remainingUses}回
+                </p>
+              </div>
+              <button
+                onClick={() => toggleCoupon(c)}
+                className="text-xs text-gray-500 hover:text-sky-700 underline shrink-0"
+              >
+                {c.isActive ? '無効にする' : '有効に戻す'}
+              </button>
+            </div>
+          ))}
+          {coupons.length === 0 && (
+            <p className="text-center text-gray-500 py-4 text-sm">クーポンはまだありません</p>
           )}
         </div>
       </div>

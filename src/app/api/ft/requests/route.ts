@@ -8,6 +8,7 @@ const schema = z.object({
   userId: z.uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   partySize: z.number().int().min(1).max(30),
+  couponCode: z.string().max(30).optional(),
 })
 
 // 予約リクエストを登録する（他区分で確定済みの日は不可）
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: '入力内容を確認してください' }, { status: 400 })
   }
-  const { activitySlug, userId, date, partySize } = parsed.data
+  const { activitySlug, userId, date, partySize, couponCode } = parsed.data
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -76,13 +77,52 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // クーポンの検証（有効・残回数あり・区分が一致 or 全区分共通）
+  let couponId: string | null = null
+  if (couponCode) {
+    const { data: coupon } = await supabaseAdmin
+      .from('ft_coupons')
+      .select('*')
+      .eq('code', couponCode.trim().toUpperCase())
+      .maybeSingle()
+    if (!coupon || !coupon.is_active) {
+      return NextResponse.json({ error: 'クーポンコードが無効です' }, { status: 400 })
+    }
+    if (coupon.activity_id && coupon.activity_id !== activity.id) {
+      return NextResponse.json(
+        { error: 'このクーポンは別の利用区分専用です' },
+        { status: 400 }
+      )
+    }
+    if (coupon.remaining_uses <= 0) {
+      return NextResponse.json({ error: 'このクーポンは使用回数の上限に達しています' }, { status: 400 })
+    }
+    couponId = coupon.id
+  }
+
   const { error } = await supabaseAdmin.from('ft_requests').insert({
     activity_id: activity.id,
     date,
     user_id: userId,
     party_size: partySize,
+    coupon_id: couponId,
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // クーポンの使用回数を消費（1リクエスト = 1回）
+  if (couponId) {
+    const { data: coupon } = await supabaseAdmin
+      .from('ft_coupons')
+      .select('remaining_uses')
+      .eq('id', couponId)
+      .single()
+    if (coupon) {
+      await supabaseAdmin
+        .from('ft_coupons')
+        .update({ remaining_uses: Math.max(0, coupon.remaining_uses - 1) })
+        .eq('id', couponId)
+    }
+  }
 
   const newState = applyCrossBlock(
     computeOwnState(current + partySize, activity.min_participants, operatorOf(activity.id)),

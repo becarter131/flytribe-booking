@@ -24,6 +24,7 @@ interface MyRequest {
   date: string
   partySize: number
   status: 'active' | 'cancelled'
+  couponCode: string | null
 }
 
 const STATE_STYLE: Record<FtDateState, string> = {
@@ -51,6 +52,7 @@ export default function ReserveCalendarPage() {
   const [days, setDays] = useState<Record<string, Record<string, DayInfo>>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [partySize, setPartySize] = useState(1)
+  const [couponCode, setCouponCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
@@ -115,7 +117,13 @@ export default function ReserveCalendarPage() {
       const res = await fetch('/api/ft/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activitySlug: slug, userId, date: selected, partySize }),
+        body: JSON.stringify({
+          activitySlug: slug,
+          userId,
+          date: selected,
+          partySize,
+          ...(couponCode.trim() && { couponCode: couponCode.trim() }),
+        }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -127,6 +135,7 @@ export default function ReserveCalendarPage() {
             : `✅ ${selected} で仮予約を受け付けました（現在 ${body.count} 名 / 確定は ${activity?.minParticipants} 名〜）`
         )
         setSelected(null)
+        setCouponCode('')
         fetchMonth()
         fetchMine()
       }
@@ -294,7 +303,7 @@ export default function ReserveCalendarPage() {
             <h2 className="font-semibold text-gray-800 mb-3">
               <span className="text-sky-700">{selected}</span> で予約する
             </h2>
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-3 mb-3">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">人数</label>
                 <select
@@ -309,15 +318,27 @@ export default function ReserveCalendarPage() {
                   ))}
                 </select>
               </div>
-              <button
-                type="button"
-                onClick={submitRequest}
-                disabled={submitting}
-                className="flex-1 bg-sky-600 text-white py-2.5 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
-              >
-                {submitting ? '送信中...' : '予約リクエストを送る'}
-              </button>
+              <div className="flex-1">
+                <label className="block text-sm text-gray-600 mb-1">
+                  クーポンコード（任意）
+                </label>
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="FT-XXXXXXXX"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={submitRequest}
+              disabled={submitting}
+              className="w-full bg-sky-600 text-white py-2.5 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+            >
+              {submitting ? '送信中...' : '予約リクエストを送る'}
+            </button>
           </div>
         )}
 
@@ -334,6 +355,11 @@ export default function ReserveCalendarPage() {
                   <span className="text-gray-700">
                     {r.date} · {r.partySize}名 ·{' '}
                     {r.status === 'cancelled' ? 'キャンセル済み' : '受付中'}
+                    {r.couponCode && (
+                      <span className="font-mono text-xs text-sky-600 ml-1">
+                        ({r.couponCode})
+                      </span>
+                    )}
                   </span>
                   {r.status === 'active' && (
                     <button
