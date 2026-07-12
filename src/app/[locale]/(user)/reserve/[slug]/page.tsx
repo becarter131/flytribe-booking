@@ -380,10 +380,10 @@ export default function ReserveCalendarPage() {
                       required
                       value={code}
                       onChange={(e) => {
-                        const v = e.target.value.toUpperCase()
+                        const v = e.target.value
                         setCouponCodes((prev) => prev.map((p, j) => (j === i ? v : p)))
                       }}
-                      placeholder="FT-XXXXXXXX"
+                      placeholder="例: ab12cd34"
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                   </div>

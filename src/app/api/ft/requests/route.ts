@@ -21,15 +21,35 @@ export async function POST(req: NextRequest) {
   }
   const { activitySlug, userId, date, partySize, couponCodes, couponCode } = parsed.data
 
-  // チケットコードは全区分で必須（人数分）
+  // チケットコードは全区分で必須（人数分）。大文字小文字は区別しない
   const codes = (couponCodes ?? (couponCode ? [couponCode] : []))
-    .map((c) => c.trim().toUpperCase())
+    .map((c) => c.trim().toLowerCase())
     .filter(Boolean)
   if (codes.length !== partySize) {
     return NextResponse.json(
       { error: '人数分のチケットコードを入力してください' },
       { status: 400 }
     )
+  }
+
+  // 総当たり対策: 直近10分間にコードの誤入力が10回以上あればブロック
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const { count: failureCount } = await supabaseAdmin
+    .from('ft_code_failures')
+    .select('id', { count: 'exact', head: true })
+    .or(`user_id.eq.${userId},ip.eq.${ip}`)
+    .gte('created_at', tenMinutesAgo)
+  if ((failureCount ?? 0) >= 10) {
+    return NextResponse.json(
+      { error: 'チケットコードの誤入力が続いたため、しばらく時間をおいてからお試しください' },
+      { status: 429 }
+    )
+  }
+  // コード関連のエラーを返すときに誤入力として記録する
+  const codeFailure = async (message: string) => {
+    await supabaseAdmin.from('ft_code_failures').insert({ user_id: userId, ip })
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 
   const today = new Date()
@@ -105,30 +125,25 @@ export async function POST(req: NextRequest) {
   const now = new Date()
   const consumptions: { couponId: string; remaining: number; uses: number }[] = []
   for (const [code, uses] of qtyByCode) {
+    // ilike は % を含まなければ「大文字小文字を区別しない完全一致」になる
+    // （既存の FT- 大文字コードも小文字入力で照合できる）
     const { data: coupon } = await supabaseAdmin
       .from('ft_coupons')
       .select('*')
-      .eq('code', code)
+      .ilike('code', code.replace(/[%_]/g, ''))
       .maybeSingle()
     if (!coupon || !coupon.is_active) {
-      return NextResponse.json({ error: `チケットコード ${code} は無効です` }, { status: 400 })
+      return codeFailure(`チケットコード ${code} は無効です`)
     }
     if (coupon.expires_at && new Date(coupon.expires_at) < now) {
-      return NextResponse.json(
-        { error: `チケットコード ${code} は有効期限が切れています` },
-        { status: 400 }
-      )
+      return codeFailure(`チケットコード ${code} は有効期限が切れています`)
     }
     if (coupon.activity_id && coupon.activity_id !== activity.id) {
-      return NextResponse.json(
-        { error: `チケットコード ${code} は別の利用区分専用です` },
-        { status: 400 }
-      )
+      return codeFailure(`チケットコード ${code} は別の利用区分専用です`)
     }
     if (coupon.remaining_uses < uses) {
-      return NextResponse.json(
-        { error: `チケットコード ${code} の残り回数が足りません（残り${coupon.remaining_uses}回）` },
-        { status: 400 }
+      return codeFailure(
+        `チケットコード ${code} の残り回数が足りません（残り${coupon.remaining_uses}回）`
       )
     }
     consumptions.push({ couponId: coupon.id, remaining: coupon.remaining_uses, uses })

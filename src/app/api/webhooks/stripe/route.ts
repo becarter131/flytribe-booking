@@ -1,13 +1,9 @@
-import { randomInt } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getStripe } from '@/lib/stripe'
 import { courseItemLabel, ITEM_TYPE_LABEL } from '@/lib/course-labels'
-
-const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-const newCode = () =>
-  'FT-' + Array.from({ length: 8 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join('')
+import { newTicketCode as newCode } from '@/lib/ticket-code'
 
 // 支払い済みになった注文に対してチケットコードを発行する
 // エラー時は 500 を返して Stripe に自動リトライさせる

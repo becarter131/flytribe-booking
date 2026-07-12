@@ -1,8 +1,8 @@
-import { randomInt } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
+import { newTicketCode } from '@/lib/ticket-code'
 
 // チケット一覧（管理者用）
 export async function GET(req: NextRequest) {
@@ -49,9 +49,7 @@ export async function POST(req: NextRequest) {
   }
   const { description, uses, activityId } = parsed.data
 
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-  const code =
-    'FT-' + Array.from({ length: 8 }, () => chars[randomInt(chars.length)]).join('')
+  const code = newTicketCode()
 
   const { data, error } = await supabaseAdmin
     .from('ft_coupons')
