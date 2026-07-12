@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const nameOf = (id: string | null) =>
     id ? ((activities ?? []).find((a) => a.id === id)?.name ?? '不明') : '全区分'
 
+  const now = new Date()
   return NextResponse.json(
     (coupons ?? []).map((c) => ({
       id: c.id,
@@ -24,6 +25,9 @@ export async function GET(req: NextRequest) {
       activityName: nameOf(c.activity_id),
       remainingUses: c.remaining_uses,
       isActive: c.is_active,
+      issuedAt: c.created_at,
+      expiresAt: c.expires_at,
+      expired: c.expires_at != null && new Date(c.expires_at) < now,
     }))
   )
 }

@@ -9,7 +9,8 @@ const schema = z.object({
   userId: z.uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   partySize: z.number().int().min(1).max(30),
-  couponCode: z.string().max(30).optional(),
+  couponCodes: z.array(z.string().min(1).max(30)).max(30).optional(), // 人数分のチケットコード
+  couponCode: z.string().max(30).optional(), // 旧形式（互換用）
 })
 
 // 予約リクエストを登録する（他区分で確定済みの日は不可）
@@ -18,11 +19,17 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: '入力内容を確認してください' }, { status: 400 })
   }
-  const { activitySlug, userId, date, partySize, couponCode } = parsed.data
+  const { activitySlug, userId, date, partySize, couponCodes, couponCode } = parsed.data
 
-  // チケットコードは全区分で必須
-  if (!couponCode?.trim()) {
-    return NextResponse.json({ error: 'チケットコードを入力してください' }, { status: 400 })
+  // チケットコードは全区分で必須（人数分）
+  const codes = (couponCodes ?? (couponCode ? [couponCode] : []))
+    .map((c) => c.trim().toUpperCase())
+    .filter(Boolean)
+  if (codes.length !== partySize) {
+    return NextResponse.json(
+      { error: '人数分のチケットコードを入力してください' },
+      { status: 400 }
+    )
   }
 
   const today = new Date()
@@ -84,40 +91,68 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // チケットの検証（有効・残回数あり・区分が一致 or 全区分共通）
-  const { data: coupon } = await supabaseAdmin
-    .from('ft_coupons')
-    .select('*')
-    .eq('code', couponCode.trim().toUpperCase())
-    .maybeSingle()
-  if (!coupon || !coupon.is_active) {
-    return NextResponse.json({ error: 'チケットコードが無効です' }, { status: 400 })
+  // チケットの検証（有効・期限内・残回数あり・区分が一致 or 全区分共通）
+  // 同じコードを複数人分入力した場合は、残回数がその分あるかを確認する
+  const qtyByCode = new Map<string, number>()
+  for (const c of codes) qtyByCode.set(c, (qtyByCode.get(c) ?? 0) + 1)
+  const now = new Date()
+  const consumptions: { couponId: string; remaining: number; uses: number }[] = []
+  for (const [code, uses] of qtyByCode) {
+    const { data: coupon } = await supabaseAdmin
+      .from('ft_coupons')
+      .select('*')
+      .eq('code', code)
+      .maybeSingle()
+    if (!coupon || !coupon.is_active) {
+      return NextResponse.json({ error: `チケットコード ${code} は無効です` }, { status: 400 })
+    }
+    if (coupon.expires_at && new Date(coupon.expires_at) < now) {
+      return NextResponse.json(
+        { error: `チケットコード ${code} は有効期限が切れています` },
+        { status: 400 }
+      )
+    }
+    if (coupon.activity_id && coupon.activity_id !== activity.id) {
+      return NextResponse.json(
+        { error: `チケットコード ${code} は別の利用区分専用です` },
+        { status: 400 }
+      )
+    }
+    if (coupon.remaining_uses < uses) {
+      return NextResponse.json(
+        { error: `チケットコード ${code} の残り回数が足りません（残り${coupon.remaining_uses}回）` },
+        { status: 400 }
+      )
+    }
+    consumptions.push({ couponId: coupon.id, remaining: coupon.remaining_uses, uses })
   }
-  if (coupon.activity_id && coupon.activity_id !== activity.id) {
-    return NextResponse.json(
-      { error: 'このチケットは別の利用区分専用です' },
-      { status: 400 }
-    )
-  }
-  if (coupon.remaining_uses <= 0) {
-    return NextResponse.json({ error: 'このチケットは使用回数の上限に達しています' }, { status: 400 })
-  }
-  const couponId: string = coupon.id
 
-  const { error } = await supabaseAdmin.from('ft_requests').insert({
-    activity_id: activity.id,
-    date,
-    user_id: userId,
-    party_size: partySize,
-    coupon_id: couponId,
-  })
+  const { data: request, error } = await supabaseAdmin
+    .from('ft_requests')
+    .insert({
+      activity_id: activity.id,
+      date,
+      user_id: userId,
+      party_size: partySize,
+    })
+    .select('id')
+    .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // チケットの使用回数を消費（1リクエスト = 1回）
-  await supabaseAdmin
-    .from('ft_coupons')
-    .update({ remaining_uses: Math.max(0, coupon.remaining_uses - 1) })
-    .eq('id', couponId)
+  // 使用チケットを記録し、回数を消費（1名 = 1回）
+  await supabaseAdmin.from('ft_request_coupons').insert(
+    consumptions.map((c) => ({
+      request_id: request.id,
+      coupon_id: c.couponId,
+      uses: c.uses,
+    }))
+  )
+  for (const c of consumptions) {
+    await supabaseAdmin
+      .from('ft_coupons')
+      .update({ remaining_uses: Math.max(0, c.remaining - c.uses) })
+      .eq('id', c.couponId)
+  }
 
   // 申込者と管理者へメール通知（未設定なら何もしない）
   const { data: user } = await supabaseAdmin

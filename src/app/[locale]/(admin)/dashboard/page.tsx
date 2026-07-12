@@ -7,7 +7,7 @@ interface RequestDetail {
   userEmail: string | null
   userPhone: string | null
   partySize: number
-  couponCode: string | null
+  couponCodes: string[]
   createdAt: string
 }
 
@@ -37,6 +37,9 @@ interface FtCoupon {
   activityName: string
   remainingUses: number
   isActive: boolean
+  issuedAt: string | null
+  expiresAt: string | null
+  expired: boolean
 }
 
 interface CalActivity {
@@ -516,9 +519,9 @@ export default function DashboardPage() {
                             {r.partySize}
                             {unit}
                           </span>
-                          {r.couponCode && (
+                          {r.couponCodes.length > 0 && (
                             <span className="font-mono text-xs text-sky-600">
-                              {r.couponCode}
+                              {r.couponCodes.join(', ')}
                             </span>
                           )}
                           <span className="text-xs text-gray-400">
@@ -750,10 +753,23 @@ export default function DashboardPage() {
                       無効
                     </span>
                   )}
+                  {c.expired && (
+                    <span className="text-xs font-sans font-medium bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">
+                      期限切れ
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {c.description ?? '（説明なし）'} · 対象: {c.activityName} · 残り{' '}
                   {c.remainingUses}回
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  発行: {c.issuedAt ? new Date(c.issuedAt).toLocaleDateString('ja-JP') : '-'}
+                  {' ・ '}
+                  有効期限:{' '}
+                  <span className={c.expired ? 'text-red-500 font-semibold' : ''}>
+                    {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('ja-JP') : '-'}
+                  </span>
                 </p>
               </div>
               <button

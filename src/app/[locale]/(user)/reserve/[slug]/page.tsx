@@ -25,7 +25,7 @@ interface MyRequest {
   partySize: number
   status: 'active' | 'cancelled' | 'rejected'
   confirmed: boolean
-  couponCode: string | null
+  couponCodes: string[]
 }
 
 const REQUEST_STATUS_LABEL: Record<MyRequest['status'], string> = {
@@ -61,7 +61,8 @@ export default function ReserveCalendarPage() {
   const [days, setDays] = useState<Record<string, Record<string, DayInfo>>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [partySize, setPartySize] = useState(1)
-  const [couponCode, setCouponCode] = useState('')
+  // 人数分のチケットコード（人数変更で入力欄の数が変わる）
+  const [couponCodes, setCouponCodes] = useState<string[]>([''])
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
@@ -121,8 +122,11 @@ export default function ReserveCalendarPage() {
       router.push('/ja/register')
       return
     }
-    if (!couponCode.trim()) {
-      setApiError('チケットコードを入力してください（チケットはショップで購入できます）')
+    const codes = couponCodes.map((c) => c.trim())
+    if (codes.length !== partySize || codes.some((c) => !c)) {
+      setApiError(
+        '人数分のチケットコードをすべて入力してください（チケットはショップで購入できます）'
+      )
       return
     }
     setSubmitting(true)
@@ -135,7 +139,7 @@ export default function ReserveCalendarPage() {
           userId,
           date: selected,
           partySize,
-          couponCode: couponCode.trim(),
+          couponCodes: codes,
         }),
       })
       const body = await res.json().catch(() => ({}))
@@ -151,7 +155,7 @@ export default function ReserveCalendarPage() {
                   : '管理者が承認すると確定します')
         )
         setSelected(null)
-        setCouponCode('')
+        setCouponCodes(Array.from({ length: partySize }, () => ''))
         fetchMonth()
         fetchMine()
       }
@@ -318,36 +322,66 @@ export default function ReserveCalendarPage() {
             <h2 className="font-semibold text-gray-800 mb-3">
               <span className="text-sky-700">{selected}</span> で予約する
             </h2>
-            <div className="flex items-end gap-3 mb-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">
-                  {slug === 'charter' ? '社数' : '人数'}
-                </label>
+            <div className="mb-3">
+              <label className="block text-sm text-gray-600 mb-1">
+                {slug === 'charter' ? '社数' : '人数'}
+              </label>
+              {slug === 'charter' ? (
+                // 貸切業務利用は1社のみ
+                <p className="border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-gray-700 inline-block">
+                  1社（貸切）
+                </p>
+              ) : (
                 <select
                   value={partySize}
-                  onChange={(e) => setPartySize(Number(e.target.value))}
+                  onChange={(e) => {
+                    const n = Number(e.target.value)
+                    setPartySize(n)
+                    // 入力済みのコードを保ったまま入力欄の数を人数に合わせる
+                    setCouponCodes((prev) =>
+                      Array.from({ length: n }, (_, i) => prev[i] ?? '')
+                    )
+                  }}
                   className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
                 >
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  {Array.from(
+                    { length: activity?.maxParticipants ?? 10 },
+                    (_, i) => i + 1
+                  ).map((n) => (
                     <option key={n} value={n}>
                       {n}
                       {unit}
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm text-gray-600 mb-1">
-                  チケットコード（必須）
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="FT-XXXXXXXX"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
+              )}
+            </div>
+            <div className="mb-3">
+              <label className="block text-sm text-gray-600 mb-1">
+                チケットコード（{slug === 'charter' ? '必須' : '人数分すべて必須'}）
+              </label>
+              <div className="space-y-2">
+                {couponCodes.map((code, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    {couponCodes.length > 1 && (
+                      <span className="text-xs text-gray-400 w-10 shrink-0">
+                        {i + 1}
+                        {unit}目
+                      </span>
+                    )}
+                    <input
+                      type="text"
+                      required
+                      value={code}
+                      onChange={(e) => {
+                        const v = e.target.value.toUpperCase()
+                        setCouponCodes((prev) => prev.map((p, j) => (j === i ? v : p)))
+                      }}
+                      placeholder="FT-XXXXXXXX"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
             <button
@@ -377,9 +411,9 @@ export default function ReserveCalendarPage() {
                     {r.confirmed
                       ? '予約確定済（キャンセル不可）'
                       : (REQUEST_STATUS_LABEL[r.status] ?? r.status)}
-                    {r.couponCode && (
+                    {r.couponCodes.length > 0 && (
                       <span className="font-mono text-xs text-sky-600 ml-1">
-                        ({r.couponCode})
+                        ({r.couponCodes.join(', ')})
                       </span>
                     )}
                   </span>

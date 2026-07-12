@@ -11,7 +11,9 @@ interface Ticket {
   activitySlug: string | null
   remainingUses: number
   isActive: boolean
-  purchasedAt: string | null
+  issuedAt: string | null
+  expiresAt: string | null
+  expired: boolean
 }
 
 // マイチケット: 購入済みのチケットコードと使用状況の一覧
@@ -44,7 +46,9 @@ export default function MyTicketsPage() {
     }
   }
 
-  const usable = (t: Ticket) => t.isActive && t.remainingUses > 0
+  const usable = (t: Ticket) => t.isActive && t.remainingUses > 0 && !t.expired
+  const dateOf = (s: string | null) =>
+    s ? new Date(s).toLocaleDateString('ja-JP') : '-'
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-100 px-4 py-8">
@@ -89,11 +93,13 @@ export default function MyTicketsPage() {
                             : 'bg-gray-200 text-gray-500'
                         }`}
                       >
-                        {!usable(t)
-                          ? '使用済み'
-                          : t.remainingUses > 1
-                            ? `利用可能（残り${t.remainingUses}回）`
-                            : '利用可能'}
+                        {t.expired
+                          ? '期限切れ'
+                          : !usable(t)
+                            ? '使用済み'
+                            : t.remainingUses > 1
+                              ? `利用可能（残り${t.remainingUses}回）`
+                              : '利用可能'}
                       </span>
                       {t.activityName && (
                         <span className="text-xs text-gray-500">{t.activityName}</span>
@@ -103,11 +109,12 @@ export default function MyTicketsPage() {
                     <p className="font-mono text-lg font-bold text-sky-800 tracking-wider mt-0.5">
                       {t.code}
                     </p>
-                    {t.purchasedAt && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        購入日: {new Date(t.purchasedAt).toLocaleDateString('ja-JP')}
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      発行日: {dateOf(t.issuedAt)} ・ 有効期限:{' '}
+                      <span className={t.expired ? 'text-red-500 font-semibold' : ''}>
+                        {dateOf(t.expiresAt)}
+                      </span>
+                    </p>
                   </div>
                   <div className="shrink-0 flex flex-col gap-2">
                     <button

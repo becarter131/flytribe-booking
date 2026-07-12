@@ -116,7 +116,8 @@ export default function ShopSuccessPage() {
             <p className="text-xs text-gray-500 mb-6">
               予約時に「チケットコード」欄へ1枚分のコードを入力してご利用ください。
               {codes.length > 1 && 'コードは1枚ずつ別の方に渡してお使いいただけます。'}
-              発行済みのコードは「マイチケット」からいつでも確認できます。
+              有効期限は発行から半年間です。
+              発行済みのコードと有効期限は「マイチケット」からいつでも確認できます。
             </p>
             <div className="flex flex-col gap-2">
               <Link

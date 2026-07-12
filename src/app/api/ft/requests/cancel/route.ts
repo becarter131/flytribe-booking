@@ -52,18 +52,22 @@ export async function POST(req: NextRequest) {
     .eq('id', requestId)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // チケットを使っていた場合は使用回数を戻す
-  if (request.coupon_id) {
+  // 使用したチケットの回数をすべて戻す
+  const { data: usedCoupons } = await supabaseAdmin
+    .from('ft_request_coupons')
+    .select('coupon_id, uses')
+    .eq('request_id', requestId)
+  for (const rc of usedCoupons ?? []) {
     const { data: coupon } = await supabaseAdmin
       .from('ft_coupons')
       .select('remaining_uses')
-      .eq('id', request.coupon_id)
+      .eq('id', rc.coupon_id)
       .single()
     if (coupon) {
       await supabaseAdmin
         .from('ft_coupons')
-        .update({ remaining_uses: coupon.remaining_uses + 1 })
-        .eq('id', request.coupon_id)
+        .update({ remaining_uses: coupon.remaining_uses + rc.uses })
+        .eq('id', rc.coupon_id)
     }
   }
 

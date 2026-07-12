@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const { data: requests } = await supabaseAdmin
     .from('ft_requests')
-    .select('id, date, party_size, status, coupon:ft_coupons(code)')
+    .select('id, date, party_size, status, coupons:ft_request_coupons(uses, coupon:ft_coupons(code))')
     .eq('user_id', userId)
     .eq('activity_id', activity.id)
     .order('date')
@@ -33,13 +33,21 @@ export async function GET(req: NextRequest) {
   const approved = new Set((approvedDates ?? []).map((d) => d.date))
 
   return NextResponse.json({
-    requests: (requests ?? []).map((r) => ({
-      id: r.id,
-      date: r.date,
-      partySize: r.party_size,
-      status: r.status,
-      confirmed: r.status === 'active' && approved.has(r.date),
-      couponCode: (r.coupon as unknown as { code: string } | null)?.code ?? null,
-    })),
+    requests: (requests ?? []).map((r) => {
+      const usedCoupons = (r.coupons ?? []) as unknown as {
+        uses: number
+        coupon: { code: string } | null
+      }[]
+      return {
+        id: r.id,
+        date: r.date,
+        partySize: r.party_size,
+        status: r.status,
+        confirmed: r.status === 'active' && approved.has(r.date),
+        couponCodes: usedCoupons
+          .filter((c) => c.coupon)
+          .map((c) => (c.uses > 1 ? `${c.coupon!.code}×${c.uses}` : c.coupon!.code)),
+      }
+    }),
   })
 }

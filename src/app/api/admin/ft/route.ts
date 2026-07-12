@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from('ft_requests')
       .select(
-        'id, activity_id, date, party_size, status, created_at, user:ft_users(name, email, phone), coupon:ft_coupons(code)'
+        'id, activity_id, date, party_size, status, created_at, user:ft_users(name, email, phone), coupons:ft_request_coupons(uses, coupon:ft_coupons(code))'
       )
       .gte('date', today),
     supabaseAdmin
@@ -31,21 +31,26 @@ export async function GET(req: NextRequest) {
   const counts = new Map<string, number>()
   const details = new Map<
     string,
-    { userName: string | null; userEmail: string | null; userPhone: string | null; partySize: number; couponCode: string | null; createdAt: string }[]
+    { userName: string | null; userEmail: string | null; userPhone: string | null; partySize: number; couponCodes: string[]; createdAt: string }[]
   >()
   for (const r of requests ?? []) {
     if (r.status !== 'active') continue
     const key = `${r.activity_id}|${r.date}`
     counts.set(key, (counts.get(key) ?? 0) + r.party_size)
     const user = r.user as unknown as { name: string; email: string; phone: string | null } | null
-    const coupon = r.coupon as unknown as { code: string } | null
+    const usedCoupons = (r.coupons ?? []) as unknown as {
+      uses: number
+      coupon: { code: string } | null
+    }[]
     const list = details.get(key) ?? []
     list.push({
       userName: user?.name ?? null,
       userEmail: user?.email ?? null,
       userPhone: user?.phone ?? null,
       partySize: r.party_size,
-      couponCode: coupon?.code ?? null,
+      couponCodes: usedCoupons
+        .filter((c) => c.coupon)
+        .map((c) => (c.uses > 1 ? `${c.coupon!.code}×${c.uses}` : c.coupon!.code)),
       createdAt: r.created_at,
     })
     details.set(key, list)
@@ -174,23 +179,28 @@ export async function PATCH(req: NextRequest) {
   if (operatorStatus === 'rejected') {
     const { data: affected } = await supabaseAdmin
       .from('ft_requests')
-      .select('id, coupon_id, user:ft_users(name, email)')
+      .select('id, user:ft_users(name, email)')
       .eq('activity_id', activityId)
       .eq('date', date)
       .eq('status', 'active')
     for (const r of affected ?? []) {
       await supabaseAdmin.from('ft_requests').update({ status: 'rejected' }).eq('id', r.id)
-      if (r.coupon_id) {
+      // 使用したチケットの回数をすべて戻す
+      const { data: usedCoupons } = await supabaseAdmin
+        .from('ft_request_coupons')
+        .select('coupon_id, uses')
+        .eq('request_id', r.id)
+      for (const rc of usedCoupons ?? []) {
         const { data: coupon } = await supabaseAdmin
           .from('ft_coupons')
           .select('remaining_uses')
-          .eq('id', r.coupon_id)
+          .eq('id', rc.coupon_id)
           .single()
         if (coupon) {
           await supabaseAdmin
             .from('ft_coupons')
-            .update({ remaining_uses: coupon.remaining_uses + 1 })
-            .eq('id', r.coupon_id)
+            .update({ remaining_uses: coupon.remaining_uses + rc.uses })
+            .eq('id', rc.coupon_id)
         }
       }
       const user = r.user as unknown as { name: string; email: string } | null
