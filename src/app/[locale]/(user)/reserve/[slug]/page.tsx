@@ -222,13 +222,15 @@ export default function ReserveCalendarPage() {
             <span className="w-3 h-3 rounded bg-yellow-200 inline-block" />
             仮予約
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-green-300 inline-block" />
-            確定
-          </span>
+          {slug !== 'charter' && (
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded bg-green-300 inline-block" />
+              確定
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 rounded bg-gray-300 inline-block" />
-            埋まり（他区分で確定）
+            {slug === 'charter' ? '埋まり（確定済み・他区分で確定）' : '埋まり（他区分で確定）'}
           </span>
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 rounded bg-red-200 inline-block" />
@@ -269,13 +271,12 @@ export default function ReserveCalendarPage() {
               const key = ymd(d)
               const info = days[key]?.[slug]
               const state: FtDateState = info?.state ?? 'blank'
+              // 貸切業務は1日1社のため、確定済みの日は「埋まり」と同じグレー表示にする
+              const displayState: FtDateState =
+                slug === 'charter' && state === 'confirmed' ? 'occupied' : state
               const isPast = d < today
-              // 貸切業務は1日1社のため、確定済みの日は他の方が選択できない（講座・飛行会は相乗り可）
               const clickable =
-                !isPast &&
-                state !== 'rejected' &&
-                state !== 'occupied' &&
-                !(slug === 'charter' && state === 'confirmed')
+                !isPast && displayState !== 'rejected' && displayState !== 'occupied'
               return (
                 <button
                   key={key}
@@ -289,11 +290,11 @@ export default function ReserveCalendarPage() {
                   className={`aspect-square rounded-lg border text-sm flex flex-col items-center justify-center transition-colors ${
                     isPast
                       ? 'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed'
-                      : STATE_STYLE[state] + ' border-gray-200'
+                      : STATE_STYLE[displayState] + ' border-gray-200'
                   } ${selected === key ? 'ring-2 ring-sky-500' : ''}`}
                 >
                   <span className="font-medium">{d.getDate()}</span>
-                  {info && info.count > 0 && state !== 'occupied' && (
+                  {info && info.count > 0 && displayState !== 'occupied' && (
                     <span className="text-[10px] leading-none mt-0.5">
                       {info.count}
                       {activity && activity.minParticipants > 1
@@ -301,7 +302,7 @@ export default function ReserveCalendarPage() {
                         : unit}
                     </span>
                   )}
-                  {state === 'occupied' && (
+                  {displayState === 'occupied' && (
                     <span className="text-[10px] leading-none mt-0.5">埋</span>
                   )}
                 </button>
