@@ -19,8 +19,7 @@ export default async function HomePage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-100">
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <h1 className="text-4xl font-bold text-sky-800 mb-2">フライトライブ予約システム</h1>
-        <p className="font-mono text-sm text-sky-600 mb-4">FlyTribe Booking</p>
+        <h1 className="text-4xl font-bold text-sky-800 mb-4">フライトライブ予約システム</h1>
         <p className="text-lg text-gray-600 mb-12">
           AICHI AIR BASEのご利用予約はこちらから。利用にはチケットが必要です。
         </p>
@@ -57,7 +56,7 @@ export default async function HomePage() {
             <span>→</span>
           </div>
           <p className="text-xs text-sky-100 mt-1">
-            国家資格講座のチケットを事前購入できます
+            各種チケットを事前購入できます
           </p>
         </Link>
 
