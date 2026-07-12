@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { computeOwnState } from '@/lib/ft'
+import { mailBody, sendMail } from '@/lib/notify'
 
 // 予約リクエストのある日付の一覧（管理者用）
 export async function GET(req: NextRequest) {
@@ -138,11 +139,42 @@ export async function PATCH(req: NextRequest) {
     )
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
+  const { data: targetActivity } = await supabaseAdmin
+    .from('ft_activities')
+    .select('name')
+    .eq('id', activityId)
+    .single()
+  const activityName = targetActivity?.name ?? '利用区分'
+
+  // 確定にした場合: その日の申込者全員へ確定メールを送る
+  if (operatorStatus === 'approved') {
+    const { data: confirmed } = await supabaseAdmin
+      .from('ft_requests')
+      .select('user:ft_users(name, email)')
+      .eq('activity_id', activityId)
+      .eq('date', date)
+      .eq('status', 'active')
+    for (const r of confirmed ?? []) {
+      const user = r.user as unknown as { name: string; email: string } | null
+      if (!user?.email) continue
+      await sendMail(
+        user.email,
+        `【予約が確定しました】${date} ${activityName}`,
+        mailBody([
+          `${user.name} 様`,
+          '',
+          `${date} の ${activityName} のご予約が確定しました。`,
+          '当日のご利用をお待ちしております。',
+        ])
+      )
+    }
+  }
+
   // 受付停止にした場合: その日の申込を「受付停止」扱いにし、使用済みチケットの回数を戻す
   if (operatorStatus === 'rejected') {
     const { data: affected } = await supabaseAdmin
       .from('ft_requests')
-      .select('id, coupon_id')
+      .select('id, coupon_id, user:ft_users(name, email)')
       .eq('activity_id', activityId)
       .eq('date', date)
       .eq('status', 'active')
@@ -160,6 +192,20 @@ export async function PATCH(req: NextRequest) {
             .update({ remaining_uses: coupon.remaining_uses + 1 })
             .eq('id', r.coupon_id)
         }
+      }
+      const user = r.user as unknown as { name: string; email: string } | null
+      if (user?.email) {
+        await sendMail(
+          user.email,
+          `【受付停止のお知らせ】${date} ${activityName}`,
+          mailBody([
+            `${user.name} 様`,
+            '',
+            `誠に申し訳ございませんが、${date} の ${activityName} は受付停止となり、ご予約は取り消されました。`,
+            'ご使用いただいたチケットはそのまま再利用いただけます（マイチケットからご確認ください）。',
+            '別の日程でのご予約をご検討いただけますと幸いです。',
+          ])
+        )
       }
     }
   }

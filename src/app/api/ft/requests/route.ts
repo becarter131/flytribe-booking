@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { applyCrossBlock, computeOwnState } from '@/lib/ft'
+import { mailBody, notifyAdmins, sendMail } from '@/lib/notify'
 
 const schema = z.object({
   activitySlug: z.string().min(1).max(30),
@@ -117,6 +118,45 @@ export async function POST(req: NextRequest) {
     .from('ft_coupons')
     .update({ remaining_uses: Math.max(0, coupon.remaining_uses - 1) })
     .eq('id', couponId)
+
+  // 申込者と管理者へメール通知（未設定なら何もしない）
+  const { data: user } = await supabaseAdmin
+    .from('ft_users')
+    .select('name, email, phone')
+    .eq('id', userId)
+    .single()
+  const unitLabel = `${partySize}${unit}`
+  if (user?.email) {
+    await sendMail(
+      user.email,
+      `【予約申込を受け付けました】${date} ${activity.name}`,
+      mailBody([
+        `${user.name} 様`,
+        '',
+        '以下の内容で予約申込を受け付けました。',
+        '',
+        `日付: ${date}`,
+        `利用区分: ${activity.name}`,
+        `人数: ${unitLabel}`,
+        '',
+        '現時点では仮予約です。管理者の承認により予約が確定した際は、あらためてご連絡します。',
+      ])
+    )
+  }
+  await notifyAdmins(
+    `【新規申込】${date} ${activity.name}（${unitLabel}）`,
+    mailBody([
+      '新しい予約申込がありました。',
+      '',
+      `日付: ${date}`,
+      `利用区分: ${activity.name}`,
+      `申込者: ${user?.name ?? '不明'}（${user?.email ?? '-'} / ${user?.phone ?? '-'}）`,
+      `人数: ${unitLabel}`,
+      `この日の合計: ${current + partySize}${unit}（確定の目安: ${activity.min_participants}${unit}〜）`,
+      '',
+      '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+    ])
+  )
 
   const newState = applyCrossBlock(
     computeOwnState(current + partySize, activity.min_participants, operatorOf(activity.id)),
