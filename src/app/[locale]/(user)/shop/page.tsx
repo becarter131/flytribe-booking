@@ -33,6 +33,19 @@ interface ShopProduct {
 
 const PRODUCT_ICON: Record<string, string> = { meetup: '🚁', charter: '🏢' }
 
+// 貸切利用券セットの購入に同意が必要な自主管理規則（仮の文面）
+const SELF_MANAGEMENT_RULES = [
+  '1. 飛行場の利用にあたっては、航空法その他の関係法令および当施設の指示を遵守してください。',
+  '2. 貸切利用時は、利用者側で飛行の安全管理（操縦者の資格確認、機体の点検、第三者の立入管理など）を行ってください。',
+  '3. 天候の悪化その他安全上の問題がある場合は、速やかに飛行を中止してください。',
+  '4. 施設・設備を破損した場合は、速やかに管理者へ報告してください。修理費用は利用者の負担となる場合があります。',
+  '5. 場内で発生した事故・トラブルについては、利用者の責任において対応してください。',
+  '6. 本規則に違反した場合、以後のご利用をお断りすることがあります。',
+].join('\n')
+
+// 自主管理規則への同意が必要な商品（貸切利用券のセット）
+const requiresRules = (p: ShopProduct) => p.activitySlug === 'charter' && p.uses > 1
+
 type MachineFilter = 'all' | 'multicopter' | 'helicopter'
 type LicenseFilter = 'all' | 'first' | 'second'
 type ExperienceFilter = 'all' | 'beginner' | 'experienced'
@@ -58,6 +71,11 @@ export default function ShopPage() {
   const [apiError, setApiError] = useState<string | null>(null)
   // 支払い方法選択モーダルの対象（null なら非表示）
   const [pending, setPending] = useState<PendingPurchase | null>(null)
+  // 自主管理規則モーダル
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [rulesAgreed, setRulesAgreed] = useState(false)
+  // 規則同意後に購入へ進む対象（購入ボタン経由で規則を開いた場合）
+  const [afterAgree, setAfterAgree] = useState<ShopProduct | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -72,11 +90,17 @@ export default function ShopPage() {
   }, [])
 
   // 購入ボタン: 利用者登録を確認してから支払い方法モーダルを開く
+  // 貸切利用券セットは自主管理規則への同意が済んでいなければ先に規則を表示する
   const openPayment = (target: PendingPurchase) => {
     setApiError(null)
     const userId = localStorage.getItem('ftUserId')
     if (!userId) {
       router.push('/ja/login')
+      return
+    }
+    if (target.kind === 'product' && requiresRules(target.product) && !rulesAgreed) {
+      setAfterAgree(target.product)
+      setRulesOpen(true)
       return
     }
     setPending(target)
@@ -167,8 +191,9 @@ export default function ShopPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-800 mt-4 mb-1">チケット購入ショップ</h1>
         <p className="text-sm text-gray-500 mb-4">
-          基本講習を選び、必要な限定解除をオプションとして追加できます。
-          購入するとチケットコードが発行され、講座の予約時に入力してご利用いただけます。
+          各種チケットを購入できます。講習チケットの場合は、基本講習を選び、
+          必要な限定解除をオプションとして追加できます。
+          購入するとチケットコードが発行され、予約時に入力してご利用いただけます。
           ※料金は全て税込 ※チケットの有効期限は発行から半年間です
         </p>
 
@@ -250,6 +275,22 @@ export default function ShopPage() {
                     <div>
                       <h3 className="font-semibold text-gray-800">
                         {PRODUCT_ICON[p.activitySlug]} {p.name}
+                        {requiresRules(p) && (
+                          <span className="text-xs font-normal text-gray-500 ml-1">
+                            （
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAfterAgree(null)
+                                setRulesOpen(true)
+                              }}
+                              className="text-sky-700 underline hover:text-sky-900"
+                            >
+                              自主管理規則
+                            </button>
+                            への同意が必要です）
+                          </span>
+                        )}
                       </h3>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {p.activitySlug === 'meetup' ? '飛行会' : '貸切業務'}の予約に使える
@@ -348,6 +389,68 @@ export default function ShopPage() {
           )}
         </div>
       </div>
+
+      {/* 自主管理規則モーダル */}
+      {rulesOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center px-4 z-50"
+          onClick={() => setRulesOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-bold text-gray-800 mb-3">自主管理規則</h2>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-line mb-4">
+              {SELF_MANAGEMENT_RULES}
+            </div>
+            <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer mb-4">
+              <input
+                type="checkbox"
+                checked={rulesAgreed}
+                onChange={(e) => setRulesAgreed(e.target.checked)}
+                className="w-4 h-4 accent-sky-600 mt-0.5"
+              />
+              <span>自主管理規則の内容を確認し、同意します</span>
+            </label>
+            {afterAgree ? (
+              <button
+                type="button"
+                disabled={!rulesAgreed}
+                onClick={() => {
+                  setRulesOpen(false)
+                  const product = afterAgree
+                  setAfterAgree(null)
+                  setPending({ kind: 'product', product })
+                }}
+                className="w-full bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 disabled:opacity-50"
+              >
+                同意して購入に進む
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRulesOpen(false)}
+                className="w-full border border-gray-300 text-gray-600 font-semibold py-3 rounded-lg hover:bg-gray-50"
+              >
+                閉じる
+              </button>
+            )}
+            {afterAgree && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRulesOpen(false)
+                  setAfterAgree(null)
+                }}
+                className="w-full text-sm text-gray-500 hover:text-gray-700 mt-3 py-1"
+              >
+                キャンセル
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 支払い方法選択モーダル */}
       {pending && (
