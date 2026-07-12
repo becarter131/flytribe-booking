@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
 
-      // ===== 利用券（飛行会・貸切）: 商品の回数分使えるチケットを発行 =====
+      // ===== 利用券（飛行会・貸切）: セットは1回券コードを枚数分発行する =====
       if (order?.shop_product_id) {
         const { data: product } = await supabaseAdmin
           .from('ft_shop_products')
@@ -63,24 +63,25 @@ export async function POST(req: NextRequest) {
           .single()
 
         const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-        const code =
-          'FT-' + Array.from({ length: 8 }, () => chars[randomInt(chars.length)]).join('')
-        const { data: coupon, error: couponError } = await supabaseAdmin
+        const uses = product?.uses ?? 1
+        const rows = Array.from({ length: uses }, () => ({
+          code:
+            'FT-' + Array.from({ length: 8 }, () => chars[randomInt(chars.length)]).join(''),
+          description: `購入チケット: ${product?.name ?? '利用券'}`,
+          activity_id: activity?.id ?? null,
+          remaining_uses: 1,
+          ticket_order_id: order.id,
+        }))
+        const { data: coupons, error: couponError } = await supabaseAdmin
           .from('ft_coupons')
-          .insert({
-            code,
-            description: `購入チケット: ${product?.name ?? '利用券'}`,
-            activity_id: activity?.id ?? null,
-            remaining_uses: product?.uses ?? 1,
-          })
+          .insert(rows)
           .select('id')
-          .single()
         if (couponError) {
           return NextResponse.json({ error: couponError.message }, { status: 500 })
         }
         await supabaseAdmin
           .from('ft_ticket_orders')
-          .update({ coupon_id: coupon.id })
+          .update({ coupon_id: coupons?.[0]?.id ?? null })
           .eq('id', order.id)
         return NextResponse.json({ received: true })
       }
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
             activity_id: courseActivity?.id ?? null,
             course_item_id: order.course_item_id,
             remaining_uses: 1,
+            ticket_order_id: order.id,
           })
           .select('id')
           .single()

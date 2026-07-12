@@ -253,8 +253,10 @@ export default function ShopPage() {
                         {PRODUCT_ICON[p.activitySlug]} {p.name}
                       </h3>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {p.activitySlug === 'meetup' ? '飛行会' : '貸切業務'}の予約に
-                        {p.uses > 1 ? `${p.uses}回` : '1回'}使えます
+                        {p.activitySlug === 'meetup' ? '飛行会' : '貸切業務'}の予約に使える
+                        {p.uses > 1
+                          ? `1回券コードを${p.uses}枚発行します（1枚ずつ譲渡可能）`
+                          : '1回券コードを発行します'}
                       </p>
                       <p className="text-sky-700 font-bold mt-1">
                         {p.priceJpy.toLocaleString()}円
