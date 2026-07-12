@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+interface RequestDetail {
+  userName: string | null
+  userEmail: string | null
+  partySize: number
+  couponCode: string | null
+  createdAt: string
+}
+
 interface FtAdminRow {
   activityId: string
   activitySlug: string
@@ -10,12 +18,14 @@ interface FtAdminRow {
   count: number
   minParticipants: number
   state: 'blank' | 'tentative' | 'confirmed' | 'rejected'
+  requests: RequestDetail[]
 }
 
 const STATE_LABEL: Record<string, { label: string; color: string }> = {
   tentative: { label: '仮予約', color: 'bg-yellow-100 text-yellow-800' },
   confirmed: { label: '確定', color: 'bg-green-100 text-green-800' },
   rejected: { label: '受付停止', color: 'bg-red-100 text-red-800' },
+  occupied: { label: '埋まり', color: 'bg-gray-200 text-gray-600' },
   blank: { label: '空き', color: 'bg-gray-100 text-gray-600' },
 }
 
@@ -28,6 +38,38 @@ interface FtCoupon {
   isActive: boolean
 }
 
+interface CalActivity {
+  id: string
+  slug: string
+  name: string
+}
+
+type CalState = 'blank' | 'tentative' | 'confirmed' | 'rejected' | 'occupied'
+interface CalDayInfo {
+  count: number
+  state: CalState
+}
+
+interface AdminProfile {
+  id: string
+  name: string
+}
+
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
+const CAL_DOT: Record<CalState, string> = {
+  blank: 'bg-gray-200',
+  tentative: 'bg-yellow-400',
+  confirmed: 'bg-green-500',
+  rejected: 'bg-red-500',
+  occupied: 'bg-gray-400',
+}
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const unitOf = (slug: string) => (slug === 'charter' ? '社' : '名')
+
 export default function DashboardPage() {
   const [password, setPassword] = useState<string | null>(null)
   const [passwordInput, setPasswordInput] = useState('')
@@ -37,9 +79,26 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
+  // 管理者アカウント（登録済みならローカルに保持）
+  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
+  const [regName, setRegName] = useState('')
+  const [regBirthdate, setRegBirthdate] = useState('')
+  const [regPhone, setRegPhone] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regError, setRegError] = useState<string | null>(null)
+
   const [coupons, setCoupons] = useState<FtCoupon[]>([])
   const [couponDesc, setCouponDesc] = useState('')
   const [couponUses, setCouponUses] = useState(10)
+
+  // カレンダー管理
+  const now = new Date()
+  const [calYear, setCalYear] = useState(now.getFullYear())
+  const [calMonth, setCalMonth] = useState(now.getMonth() + 1)
+  const [calActivities, setCalActivities] = useState<CalActivity[]>([])
+  const [calDays, setCalDays] = useState<Record<string, Record<string, CalDayInfo>>>({})
+  const [calSelected, setCalSelected] = useState<string | null>(null)
+  const [calBusy, setCalBusy] = useState(false)
 
   const fetchRows = useCallback(async (pw: string | null) => {
     if (!pw) return false
@@ -60,6 +119,145 @@ export default function DashboardPage() {
     }
     return res.ok
   }, [])
+
+  const fetchCalendar = useCallback(async () => {
+    const res = await fetch(`/api/ft/calendar?year=${calYear}&month=${calMonth}`)
+    if (!res.ok) return
+    const body = await res.json()
+    setCalActivities(body.activities ?? [])
+    setCalDays(body.days ?? {})
+  }, [calYear, calMonth])
+
+  useEffect(() => {
+    const restore = async () => {
+      const savedProfile = localStorage.getItem('ftAdminProfile')
+      if (savedProfile) {
+        try {
+          setAdminProfile(JSON.parse(savedProfile))
+        } catch {
+          localStorage.removeItem('ftAdminProfile')
+        }
+      }
+      const saved = sessionStorage.getItem('adminPassword')
+      const ok = await fetchRows(saved)
+      if (ok && saved) setPassword(saved)
+      setSessionChecked(true)
+    }
+    void restore()
+  }, [fetchRows])
+
+  useEffect(() => {
+    if (!password) return
+    const load = async () => {
+      await fetchCalendar()
+    }
+    void load()
+  }, [password, fetchCalendar])
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError(null)
+    setSubmitting(true)
+    const ok = await fetchRows(passwordInput)
+    if (ok) {
+      sessionStorage.setItem('adminPassword', passwordInput)
+      setPassword(passwordInput)
+    } else {
+      setLoginError('パスワードが違います')
+    }
+    setSubmitting(false)
+  }
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!password) return
+    setRegError(null)
+    if (!regName.trim() || !regBirthdate || !regPhone.trim() || !regEmail.trim()) {
+      setRegError('すべての項目を入力してください')
+      return
+    }
+    setSubmitting(true)
+    const res = await fetch('/api/admin/ft/admins', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({
+        name: regName.trim(),
+        birthdate: regBirthdate,
+        phone: regPhone.trim(),
+        email: regEmail.trim(),
+      }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setRegError(body.error ?? `エラーが発生しました (${res.status})`)
+    } else {
+      const profile = { id: body.id, name: body.name }
+      localStorage.setItem('ftAdminProfile', JSON.stringify(profile))
+      setAdminProfile(profile)
+    }
+    setSubmitting(false)
+  }
+
+  const patchStatus = async (
+    activityId: string,
+    date: string,
+    operatorStatus: 'approved' | 'rejected' | 'none'
+  ) => {
+    if (!password) return false
+    const res = await fetch('/api/admin/ft', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ activityId, date, operatorStatus }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setActionError(body.error ?? `エラーが発生しました (${res.status})`)
+      return false
+    }
+    return true
+  }
+
+  const updateStatus = async (
+    row: FtAdminRow,
+    operatorStatus: 'approved' | 'rejected' | 'none'
+  ) => {
+    setActionError(null)
+    await patchStatus(row.activityId, row.date, operatorStatus)
+    fetchRows(password)
+    fetchCalendar()
+  }
+
+  const calSetStatus = async (
+    activityId: string,
+    operatorStatus: 'approved' | 'rejected' | 'none'
+  ) => {
+    if (!calSelected) return
+    setActionError(null)
+    setCalBusy(true)
+    await patchStatus(activityId, calSelected, operatorStatus)
+    await fetchCalendar()
+    fetchRows(password)
+    setCalBusy(false)
+  }
+
+  const calStopAll = async () => {
+    if (!calSelected) return
+    setActionError(null)
+    setCalBusy(true)
+    for (const a of calActivities) {
+      const ok = await patchStatus(a.id, calSelected, 'rejected')
+      if (!ok) break
+    }
+    await fetchCalendar()
+    fetchRows(password)
+    setCalBusy(false)
+  }
 
   const createCoupon = async () => {
     if (!password) return
@@ -94,49 +292,23 @@ export default function DashboardPage() {
     fetchRows(password)
   }
 
-  useEffect(() => {
-    const restore = async () => {
-      const saved = sessionStorage.getItem('adminPassword')
-      const ok = await fetchRows(saved)
-      if (ok && saved) setPassword(saved)
-      setSessionChecked(true)
-    }
-    void restore()
-  }, [fetchRows])
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoginError(null)
-    setSubmitting(true)
-    const ok = await fetchRows(passwordInput)
-    if (ok) {
-      sessionStorage.setItem('adminPassword', passwordInput)
-      setPassword(passwordInput)
+  const calPrevMonth = () => {
+    if (calMonth === 1) {
+      setCalYear((y) => y - 1)
+      setCalMonth(12)
     } else {
-      setLoginError('パスワードが違います')
+      setCalMonth((m) => m - 1)
     }
-    setSubmitting(false)
+    setCalSelected(null)
   }
-
-  const updateStatus = async (
-    row: FtAdminRow,
-    operatorStatus: 'approved' | 'rejected' | 'none'
-  ) => {
-    if (!password) return
-    setActionError(null)
-    const res = await fetch('/api/admin/ft', {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${password}`,
-      },
-      body: JSON.stringify({ activityId: row.activityId, date: row.date, operatorStatus }),
-    })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setActionError(body.error ?? `エラーが発生しました (${res.status})`)
+  const calNextMonth = () => {
+    if (calMonth === 12) {
+      setCalYear((y) => y + 1)
+      setCalMonth(1)
+    } else {
+      setCalMonth((m) => m + 1)
     }
-    fetchRows(password)
+    setCalSelected(null)
   }
 
   if (!sessionChecked) {
@@ -175,12 +347,91 @@ export default function DashboardPage() {
     )
   }
 
+  // 管理者アカウント未登録なら登録フォームを表示（全項目必須）
+  if (!adminProfile) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
+        <form
+          onSubmit={handleRegister}
+          className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm space-y-4"
+        >
+          <h1 className="text-xl font-bold text-gray-800">管理者アカウント登録</h1>
+          <p className="text-sm text-gray-500">
+            初回のみ、管理者情報の登録が必要です（すべて必須）。
+          </p>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">氏名</label>
+            <input
+              type="text"
+              required
+              value={regName}
+              onChange={(e) => setRegName(e.target.value)}
+              placeholder="山田 太郎"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">生年月日</label>
+            <input
+              type="date"
+              required
+              value={regBirthdate}
+              onChange={(e) => setRegBirthdate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">電話番号</label>
+            <input
+              type="tel"
+              required
+              value={regPhone}
+              onChange={(e) => setRegPhone(e.target.value)}
+              placeholder="090-0000-0000"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">メールアドレス</label>
+            <input
+              type="email"
+              required
+              value={regEmail}
+              onChange={(e) => setRegEmail(e.target.value)}
+              placeholder="admin@example.com"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+          {regError && <p className="text-red-500 text-sm">{regError}</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+          >
+            登録して管理画面へ
+          </button>
+        </form>
+      </main>
+    )
+  }
+
+  // カレンダーグリッド
+  const first = new Date(calYear, calMonth - 1, 1)
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate()
+  const cells: (Date | null)[] = [
+    ...Array.from({ length: first.getDay() }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(calYear, calMonth - 1, i + 1)),
+  ]
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">
-          フライトライブ 予約管理
-        </h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-800">フライトライブ 予約管理</h1>
+          <span className="text-sm text-gray-500">管理者: {adminProfile.name}</span>
+        </div>
 
         {actionError && (
           <p className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
@@ -188,53 +439,91 @@ export default function DashboardPage() {
           </p>
         )}
 
+        {/* 予約一覧（申込内容の詳細つき） */}
+        <h2 className="text-xl font-bold text-gray-800 mb-4">予約一覧</h2>
         <div className="space-y-3">
           {rows.map((row) => {
             const s = STATE_LABEL[row.state] ?? STATE_LABEL.blank
+            const unit = unitOf(row.activitySlug)
             return (
               <div
                 key={`${row.activityId}-${row.date}`}
-                className="bg-white rounded-2xl shadow p-4 flex items-center justify-between gap-4"
+                className="bg-white rounded-2xl shadow p-4"
               >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.color}`}>
-                      {s.label}
-                    </span>
-                    <span className="font-mono text-sm text-gray-500">{row.date}</span>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.color}`}>
+                        {s.label}
+                      </span>
+                      <span className="font-mono text-sm text-gray-500">{row.date}</span>
+                    </div>
+                    <p className="font-semibold text-gray-800">{row.activityName}</p>
+                    <p className="text-sm text-gray-600">
+                      予約 {row.count}
+                      {unit}
+                      {row.minParticipants > 1 && ` / 確定は ${row.minParticipants}${unit}〜`}
+                    </p>
                   </div>
-                  <p className="font-semibold text-gray-800">{row.activityName}</p>
-                  <p className="text-sm text-gray-600">
-                    予約 {row.count}名
-                    {row.minParticipants > 1 && ` / 確定は ${row.minParticipants}名〜`}
-                  </p>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    {row.state !== 'confirmed' && row.state !== 'rejected' && (
+                      <button
+                        onClick={() => updateStatus(row, 'approved')}
+                        className="text-sm bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700"
+                      >
+                        確定にする
+                      </button>
+                    )}
+                    {row.state !== 'rejected' && (
+                      <button
+                        onClick={() => updateStatus(row, 'rejected')}
+                        className="text-sm bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600"
+                      >
+                        受付停止にする
+                      </button>
+                    )}
+                    {row.state === 'rejected' && (
+                      <button
+                        onClick={() => updateStatus(row, 'none')}
+                        className="text-sm bg-gray-500 text-white px-3 py-1 rounded-lg hover:bg-gray-600"
+                      >
+                        停止を取り消す
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2 shrink-0">
-                  {row.state !== 'confirmed' && row.state !== 'rejected' && (
-                    <button
-                      onClick={() => updateStatus(row, 'approved')}
-                      className="text-sm bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700"
-                    >
-                      確定にする
-                    </button>
-                  )}
-                  {row.state !== 'rejected' && (
-                    <button
-                      onClick={() => updateStatus(row, 'rejected')}
-                      className="text-sm bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600"
-                    >
-                      受付停止にする
-                    </button>
-                  )}
-                  {row.state === 'rejected' && (
-                    <button
-                      onClick={() => updateStatus(row, 'none')}
-                      className="text-sm bg-gray-500 text-white px-3 py-1 rounded-lg hover:bg-gray-600"
-                    >
-                      停止を取り消す
-                    </button>
-                  )}
-                </div>
+
+                {/* 申込内容の詳細 */}
+                {row.requests.length > 0 && (
+                  <div className="mt-3 border-t border-gray-100 pt-3">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">
+                      申込内容（{row.requests.length}件）
+                    </p>
+                    <ul className="space-y-1">
+                      {row.requests.map((r, i) => (
+                        <li
+                          key={i}
+                          className="text-sm text-gray-700 flex flex-wrap items-center gap-x-3 gap-y-0.5"
+                        >
+                          <span className="font-medium">{r.userName ?? '（不明）'}</span>
+                          <span className="text-gray-500 text-xs">{r.userEmail}</span>
+                          <span>
+                            {r.partySize}
+                            {unit}
+                          </span>
+                          {r.couponCode && (
+                            <span className="font-mono text-xs text-sky-600">
+                              {r.couponCode}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            申込: {new Date(r.createdAt).toLocaleString('ja-JP')}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -242,6 +531,159 @@ export default function DashboardPage() {
             <p className="text-center text-gray-500 py-8">予約のある日はまだありません</p>
           )}
         </div>
+
+        {/* カレンダー管理（受付停止の設定） */}
+        <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">
+          カレンダー管理（受付停止の設定）
+        </h2>
+        <p className="text-sm text-gray-500 mb-3">
+          日付を選ぶと利用区分ごとの状態を確認でき、受付停止の設定・解除ができます。
+          確定済みの日付も天候不順などの際に受付停止へ変更できます。
+        </p>
+        <div className="bg-white rounded-2xl shadow p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              type="button"
+              onClick={calPrevMonth}
+              className="text-gray-500 hover:text-sky-700 px-3 py-1 rounded hover:bg-sky-50"
+            >
+              ←
+            </button>
+            <p className="font-bold text-gray-800">
+              {calYear}年 {calMonth}月
+            </p>
+            <button
+              type="button"
+              onClick={calNextMonth}
+              className="text-gray-500 hover:text-sky-700 px-3 py-1 rounded hover:bg-sky-50"
+            >
+              →
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 mb-1">
+            {WEEKDAYS.map((w) => (
+              <div key={w}>{w}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {cells.map((d, i) => {
+              if (!d) return <div key={`b${i}`} />
+              const key = ymd(d)
+              const isPast = d < today
+              const info = calDays[key]
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={isPast}
+                  onClick={() => setCalSelected(key)}
+                  className={`aspect-square rounded-lg border text-sm flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                    isPast
+                      ? 'bg-gray-100 text-gray-300 border-gray-100 cursor-not-allowed'
+                      : 'bg-white hover:bg-sky-50 text-gray-700 border-gray-200'
+                  } ${calSelected === key ? 'ring-2 ring-sky-500' : ''}`}
+                >
+                  <span className="font-medium">{d.getDate()}</span>
+                  {!isPast && (
+                    <span className="flex gap-0.5">
+                      {calActivities.map((a) => (
+                        <span
+                          key={a.slug}
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            CAL_DOT[info?.[a.slug]?.state ?? 'blank']
+                          }`}
+                        />
+                      ))}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            ●の色: 灰=空き / 黄=仮予約 / 緑=確定 / 赤=受付停止 / 濃灰=埋まり（左から
+            {calActivities.map((a) => a.name).join('・')}）
+          </p>
+        </div>
+
+        {calSelected && (
+          <div className="bg-white rounded-2xl shadow p-5 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-800">
+                <span className="text-sky-700">{calSelected}</span> の状態
+              </h3>
+              <button
+                type="button"
+                onClick={calStopAll}
+                disabled={calBusy}
+                className="text-sm bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                全区分を受付停止
+              </button>
+            </div>
+            <div className="space-y-2">
+              {calActivities.map((a) => {
+                const info = calDays[calSelected]?.[a.slug]
+                const state: CalState = info?.state ?? 'blank'
+                const s = STATE_LABEL[state] ?? STATE_LABEL.blank
+                const unit = unitOf(a.slug)
+                return (
+                  <div
+                    key={a.slug}
+                    className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${s.color}`}
+                      >
+                        {s.label}
+                      </span>
+                      <span className="text-sm text-gray-700 truncate">{a.name}</span>
+                      {(info?.count ?? 0) > 0 && (
+                        <span className="text-xs text-gray-500 shrink-0">
+                          {info!.count}
+                          {unit}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      {state === 'tentative' && (
+                        <button
+                          type="button"
+                          onClick={() => calSetStatus(a.id, 'approved')}
+                          disabled={calBusy}
+                          className="text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                          確定にする
+                        </button>
+                      )}
+                      {state !== 'rejected' && (
+                        <button
+                          type="button"
+                          onClick={() => calSetStatus(a.id, 'rejected')}
+                          disabled={calBusy}
+                          className="text-xs bg-red-500 text-white px-2.5 py-1 rounded-lg hover:bg-red-600 disabled:opacity-50"
+                        >
+                          受付停止
+                        </button>
+                      )}
+                      {state === 'rejected' && (
+                        <button
+                          type="button"
+                          onClick={() => calSetStatus(a.id, 'none')}
+                          disabled={calBusy}
+                          className="text-xs bg-gray-500 text-white px-2.5 py-1 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+                        >
+                          停止を取り消す
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* チケット管理 */}
         <h2 className="text-xl font-bold text-gray-800 mt-10 mb-4">チケット管理</h2>

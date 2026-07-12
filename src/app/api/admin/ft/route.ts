@@ -14,7 +14,9 @@ export async function GET(req: NextRequest) {
     supabaseAdmin.from('ft_activities').select('*').eq('is_active', true).order('sort'),
     supabaseAdmin
       .from('ft_requests')
-      .select('activity_id, date, party_size, status')
+      .select(
+        'id, activity_id, date, party_size, status, created_at, user:ft_users(name, email), coupon:ft_coupons(code)'
+      )
       .gte('date', today),
     supabaseAdmin
       .from('ft_dates')
@@ -26,10 +28,25 @@ export async function GET(req: NextRequest) {
   for (const d of dates ?? []) operator.set(`${d.activity_id}|${d.date}`, d.operator_status)
 
   const counts = new Map<string, number>()
+  const details = new Map<
+    string,
+    { userName: string | null; userEmail: string | null; partySize: number; couponCode: string | null; createdAt: string }[]
+  >()
   for (const r of requests ?? []) {
     if (r.status !== 'active') continue
     const key = `${r.activity_id}|${r.date}`
     counts.set(key, (counts.get(key) ?? 0) + r.party_size)
+    const user = r.user as unknown as { name: string; email: string } | null
+    const coupon = r.coupon as unknown as { code: string } | null
+    const list = details.get(key) ?? []
+    list.push({
+      userName: user?.name ?? null,
+      userEmail: user?.email ?? null,
+      partySize: r.party_size,
+      couponCode: coupon?.code ?? null,
+      createdAt: r.created_at,
+    })
+    details.set(key, list)
   }
 
   const rows = []
@@ -45,6 +62,9 @@ export async function GET(req: NextRequest) {
       count,
       minParticipants: activity.min_participants,
       state: computeOwnState(count, activity.min_participants, operator.get(key) ?? 'none'),
+      requests: (details.get(key) ?? []).sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt)
+      ),
     })
   }
   rows.sort((a, b) => a.date.localeCompare(b.date))
