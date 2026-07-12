@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 interface OrderInfo {
   status: 'pending' | 'paid'
   priceJpy: number
+  paymentMethod: 'card' | 'bank_transfer'
   itemLabel: string | null
   ticketCodes: string[]
 }
@@ -116,6 +117,32 @@ export default function ShopSuccessPage() {
               予約時に「チケットコード」欄へ1枚分のコードを入力してご利用ください。
               {codes.length > 1 && 'コードは1枚ずつ別の方に渡してお使いいただけます。'}
               発行済みのコードは「マイチケット」からいつでも確認できます。
+            </p>
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/ja/tickets"
+                className="inline-block bg-sky-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-sky-700"
+              >
+                マイチケットを見る
+              </Link>
+              <Link href="/ja" className="text-sm text-gray-500 hover:text-sky-700 py-1">
+                トップに戻る
+              </Link>
+            </div>
+          </>
+        ) : order.paymentMethod === 'bank_transfer' && order.status === 'pending' ? (
+          <>
+            <p className="text-5xl mb-4">🏦</p>
+            <h1 className="text-xl font-bold text-gray-800 mb-2">
+              銀行振込でのご購入を受け付けました
+            </h1>
+            <p className="text-sm text-gray-600 mb-4 text-left">
+              お振込先の口座情報は、決済画面およびご登録のメールアドレス宛にご案内しています。
+              ご入金の確認後（通常1〜3営業日）にチケットコードを発行し、
+              「マイチケット」に表示されます。
+            </p>
+            <p className="text-xs text-gray-500 mb-6">
+              ※ ご案内した金額と同額をお振込みください。入金確認まで今しばらくお待ちください。
             </p>
             <div className="flex flex-col gap-2">
               <Link

@@ -9,7 +9,7 @@ export async function GET(
   const { id } = await params
   const { data: order } = await supabaseAdmin
     .from('ft_ticket_orders')
-    .select('id, status, price_jpy')
+    .select('id, status, price_jpy, payment_method')
     .eq('id', id)
     .single()
   if (!order) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -25,6 +25,7 @@ export async function GET(
   return NextResponse.json({
     status: order.status,
     priceJpy: order.price_jpy,
+    paymentMethod: order.payment_method ?? 'card',
     itemLabel: description?.replace(/^購入チケット: /, '') ?? null,
     ticketCodes: (coupons ?? []).map((c) => c.code),
   })

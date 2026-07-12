@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import type Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getStripe } from '@/lib/stripe'
 import { courseItemLabel, ITEM_TYPE_LABEL } from '@/lib/course-labels'
@@ -10,10 +11,31 @@ const schema = z
     optionItemIds: z.array(z.uuid()).max(3).optional().default([]), // 限定解除オプション
     shopProductId: z.uuid().optional(),           // 利用券（飛行会・貸切）
     userId: z.uuid(),
+    paymentMethod: z.enum(['card', 'bank_transfer']).optional().default('card'),
   })
   .refine((v) => !!v.basicItemId !== !!v.shopProductId, {
     message: 'basicItemId か shopProductId のどちらか一方を指定してください',
   })
+
+// 支払い方法ごとの Stripe Checkout 設定
+// 銀行振込は Stripe がバーチャル口座を発行し、入金確認後に webhook（async_payment_succeeded）が届く
+function paymentParams(
+  paymentMethod: 'card' | 'bank_transfer'
+): Partial<Stripe.Checkout.SessionCreateParams> {
+  if (paymentMethod === 'bank_transfer') {
+    return {
+      payment_method_types: ['customer_balance'],
+      payment_method_options: {
+        customer_balance: {
+          funding_type: 'bank_transfer',
+          bank_transfer: { type: 'jp_bank_transfer' },
+        },
+      },
+      customer_creation: 'always',
+    }
+  }
+  return { payment_method_types: ['card'] }
+}
 
 // 講座チケットの購入: 基本講習 + 選択した限定解除オプションをまとめて1回で決済する
 export async function POST(req: NextRequest) {
@@ -21,7 +43,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: '入力内容を確認してください' }, { status: 400 })
   }
-  const { basicItemId, optionItemIds, shopProductId, userId } = parsed.data
+  const { basicItemId, optionItemIds, shopProductId, userId, paymentMethod } = parsed.data
 
   const stripe = getStripe()
   if (!stripe) {
@@ -54,6 +76,7 @@ export async function POST(req: NextRequest) {
         user_id: userId,
         shop_product_id: product.id,
         price_jpy: product.price_jpy,
+        payment_method: paymentMethod,
       })
       .select()
       .single()
@@ -61,6 +84,7 @@ export async function POST(req: NextRequest) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      ...paymentParams(paymentMethod),
       line_items: [
         {
           price_data: {
@@ -123,6 +147,7 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       course_item_id: basic.id,
       price_jpy: total,
+      payment_method: paymentMethod,
     })
     .select()
     .single()
@@ -141,6 +166,7 @@ export async function POST(req: NextRequest) {
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    ...paymentParams(paymentMethod),
     line_items: items.map((i) => ({
       price_data: {
         currency: 'jpy',

@@ -37,6 +37,12 @@ type MachineFilter = 'all' | 'multicopter' | 'helicopter'
 type LicenseFilter = 'all' | 'first' | 'second'
 type ExperienceFilter = 'all' | 'beginner' | 'experienced'
 
+type PaymentMethod = 'card' | 'bank_transfer'
+// 支払い方法モーダルで扱う購入対象
+type PendingPurchase =
+  | { kind: 'product'; product: ShopProduct }
+  | { kind: 'course'; basic: CourseItem }
+
 // 国家資格講座チケットの購入ショップ
 // 基本講習を選び、対応する限定解除をオプションとして追加購入できる
 export default function ShopPage() {
@@ -50,6 +56,8 @@ export default function ShopPage() {
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [buyingId, setBuyingId] = useState<string | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
+  // 支払い方法選択モーダルの対象（null なら非表示）
+  const [pending, setPending] = useState<PendingPurchase | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -63,19 +71,41 @@ export default function ShopPage() {
     void load()
   }, [])
 
-  const buyProduct = async (product: ShopProduct) => {
+  // 購入ボタン: 利用者登録を確認してから支払い方法モーダルを開く
+  const openPayment = (target: PendingPurchase) => {
     setApiError(null)
     const userId = localStorage.getItem('ftUserId')
     if (!userId) {
       router.push('/ja/register')
       return
     }
-    setBuyingId(product.id)
+    setPending(target)
+  }
+
+  // 支払い方法が選ばれたら Checkout セッションを作成して遷移する
+  const startCheckout = async (target: PendingPurchase, paymentMethod: PaymentMethod) => {
+    const userId = localStorage.getItem('ftUserId')
+    if (!userId) {
+      router.push('/ja/register')
+      return
+    }
+    setPending(null)
+    const buyId = target.kind === 'product' ? target.product.id : target.basic.id
+    setBuyingId(buyId)
+    const payload =
+      target.kind === 'product'
+        ? { shopProductId: target.product.id, userId, paymentMethod }
+        : {
+            basicItemId: target.basic.id,
+            optionItemIds: selectedOptions[target.basic.id] ?? [],
+            userId,
+            paymentMethod,
+          }
     try {
       const res = await fetch('/api/ft/shop/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopProductId: product.id, userId }),
+        body: JSON.stringify(payload),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -100,37 +130,6 @@ export default function ShopPage() {
           : [...current, optionId],
       }
     })
-  }
-
-  const buy = async (basic: CourseItem) => {
-    setApiError(null)
-    const userId = localStorage.getItem('ftUserId')
-    if (!userId) {
-      router.push('/ja/register')
-      return
-    }
-    setBuyingId(basic.id)
-    try {
-      const res = await fetch('/api/ft/shop/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          basicItemId: basic.id,
-          optionItemIds: selectedOptions[basic.id] ?? [],
-          userId,
-        }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setApiError(body.error ?? `エラーが発生しました (${res.status})`)
-      } else if (body.checkoutUrl) {
-        window.location.assign(body.checkoutUrl)
-        return
-      }
-    } catch (e) {
-      setApiError(`通信エラー: ${String(e)}`)
-    }
-    setBuyingId(null)
   }
 
   const basics = items.filter(
@@ -264,7 +263,7 @@ export default function ShopPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => buyProduct(p)}
+                      onClick={() => openPayment({ kind: 'product', product: p })}
                       disabled={buyingId !== null}
                       className="shrink-0 bg-sky-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
@@ -331,7 +330,7 @@ export default function ShopPage() {
 
                 <button
                   type="button"
-                  onClick={() => buy(b)}
+                  onClick={() => openPayment({ kind: 'course', basic: b })}
                   disabled={buyingId !== null}
                   className="w-full mt-4 bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 disabled:opacity-50"
                 >
@@ -349,6 +348,61 @@ export default function ShopPage() {
           )}
         </div>
       </div>
+
+      {/* 支払い方法選択モーダル */}
+      {pending && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center px-4 z-50"
+          onClick={() => setPending(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-bold text-gray-800 mb-1">お支払い方法を選択</h2>
+            <p className="text-sm text-gray-500 mb-1">
+              {pending.kind === 'product'
+                ? pending.product.name
+                : `【${MACHINE_LABEL[pending.basic.machine]}】${LICENSE_LABEL[pending.basic.license]}無人航空機操縦士コース（${EXPERIENCE_LABEL[pending.basic.experience]}）`}
+            </p>
+            <p className="text-sky-700 font-bold mb-4">
+              合計{' '}
+              {(pending.kind === 'product'
+                ? pending.product.priceJpy
+                : totalFor(pending.basic)
+              ).toLocaleString()}
+              円
+            </p>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => startCheckout(pending, 'card')}
+                className="w-full bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 flex items-center justify-center gap-2"
+              >
+                💳 クレジットカードで支払う
+              </button>
+              <button
+                type="button"
+                onClick={() => startCheckout(pending, 'bank_transfer')}
+                className="w-full bg-white text-sky-700 border-2 border-sky-600 font-semibold py-3 rounded-lg hover:bg-sky-50 flex items-center justify-center gap-2"
+              >
+                🏦 銀行振込で支払う
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              銀行振込の場合、専用の振込先口座をご案内します。
+              ご入金の確認後（通常1〜3営業日）にチケットコードを発行します。
+            </p>
+            <button
+              type="button"
+              onClick={() => setPending(null)}
+              className="w-full text-sm text-gray-500 hover:text-gray-700 mt-3 py-1"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
