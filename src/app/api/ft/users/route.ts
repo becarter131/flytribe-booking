@@ -1,24 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
+import { hashPassword } from '@/lib/password'
 
 const schema = z.object({
   name: z.string().min(1).max(100),
   email: z.email(),
   phone: z.string().min(8).max(20),
   birthdate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  password: z.string().min(8).max(100),
 })
 
-// 利用者登録（既存メールなら電話番号・生年月日を更新して返す）
+// 利用者登録
+// 既存メールでパスワード未設定なら情報を更新してパスワードを設定（旧アカウントの移行）
+// 既存メールでパスワード設定済みならログインを案内する
 export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json())
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'お名前・メールアドレス・電話番号・生年月日をすべて入力してください' },
+      {
+        error:
+          'お名前・メールアドレス・電話番号・生年月日・パスワード（8文字以上）をすべて入力してください',
+      },
       { status: 400 }
     )
   }
-  const { name, email, phone, birthdate } = parsed.data
+  const { name, email, phone, birthdate, password } = parsed.data
+  const passwordHash = hashPassword(password)
 
   const { data: existing } = await supabaseAdmin
     .from('ft_users')
@@ -26,9 +34,15 @@ export async function POST(req: NextRequest) {
     .eq('email', email)
     .maybeSingle()
   if (existing) {
+    if (existing.password_hash) {
+      return NextResponse.json(
+        { error: 'このメールアドレスは登録済みです。ログインしてください' },
+        { status: 400 }
+      )
+    }
     const { data: updated } = await supabaseAdmin
       .from('ft_users')
-      .update({ name, phone, birthdate })
+      .update({ name, phone, birthdate, password_hash: passwordHash })
       .eq('id', existing.id)
       .select()
       .single()
@@ -37,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('ft_users')
-    .insert({ name, email, phone, birthdate })
+    .insert({ name, email, phone, birthdate, password_hash: passwordHash })
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })

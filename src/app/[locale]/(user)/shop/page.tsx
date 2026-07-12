@@ -76,7 +76,7 @@ export default function ShopPage() {
     setApiError(null)
     const userId = localStorage.getItem('ftUserId')
     if (!userId) {
-      router.push('/ja/register')
+      router.push('/ja/login')
       return
     }
     setPending(target)
@@ -86,7 +86,7 @@ export default function ShopPage() {
   const startCheckout = async (target: PendingPurchase, paymentMethod: PaymentMethod) => {
     const userId = localStorage.getItem('ftUserId')
     if (!userId) {
-      router.push('/ja/register')
+      router.push('/ja/login')
       return
     }
     setPending(null)

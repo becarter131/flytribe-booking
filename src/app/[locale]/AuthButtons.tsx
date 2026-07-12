@@ -36,7 +36,7 @@ export default function AuthButtons() {
   ) : (
     <div className="flex justify-end">
       <Link
-        href="/ja/register"
+        href="/ja/login"
         className="text-sm font-semibold text-white bg-sky-600 px-4 py-2 rounded-lg hover:bg-sky-700"
       >
         ログイン / 新規会員登録

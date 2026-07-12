@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -16,6 +17,10 @@ const schema = z.object({
   birthdate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, { error: '生年月日を入力してください' }),
+  password: z
+    .string()
+    .min(8, { error: 'パスワードは8文字以上で入力してください' })
+    .max(100, { error: 'パスワードが長すぎます' }),
 })
 
 type FormData = z.infer<typeof schema>
@@ -90,6 +95,16 @@ export default function RegisterPage() {
             )}
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              パスワード（8文字以上）
+            </label>
+            <input {...register('password')} type="password" className={inputClass} />
+            {errors.password && (
+              <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+            )}
+          </div>
+
           {apiError && (
             <p className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {apiError}
@@ -104,6 +119,13 @@ export default function RegisterPage() {
             {isSubmitting ? '登録中...' : '登録して予約に進む'}
           </button>
         </form>
+
+        <p className="text-center mt-5 text-sm text-gray-500">
+          登録済みの方は{' '}
+          <Link href="/ja/login" className="text-sky-700 font-semibold hover:underline">
+            ログインはこちら
+          </Link>
+        </p>
       </div>
     </main>
   )

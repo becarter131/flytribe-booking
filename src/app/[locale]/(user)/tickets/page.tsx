@@ -26,7 +26,7 @@ export default function MyTicketsPage() {
     const load = async () => {
       const userId = localStorage.getItem('ftUserId')
       if (!userId) {
-        router.push('/ja/register')
+        router.push('/ja/login')
         return
       }
       const res = await fetch(`/api/ft/my-tickets?userId=${userId}`)

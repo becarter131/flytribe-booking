@@ -119,7 +119,7 @@ export default function ReserveCalendarPage() {
     setMessage(null)
     const userId = localStorage.getItem('ftUserId')
     if (!userId) {
-      router.push('/ja/register')
+      router.push('/ja/login')
       return
     }
     const codes = couponCodes.map((c) => c.trim())
