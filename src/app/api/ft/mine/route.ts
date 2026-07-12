@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       date: r.date,
       partySize: r.party_size,
       status: r.status,
-      couponCode: (r.coupon as { code: string } | null)?.code ?? null,
+      couponCode: (r.coupon as unknown as { code: string } | null)?.code ?? null,
     })),
   })
 }
