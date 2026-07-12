@@ -228,10 +228,30 @@ export default function DashboardPage() {
     return true
   }
 
+  // 確定・受付停止の前に最終確認のポップアップを出す
+  const confirmStatusChange = (
+    date: string,
+    activityName: string,
+    operatorStatus: 'approved' | 'rejected' | 'none'
+  ): boolean => {
+    if (operatorStatus === 'approved') {
+      return confirm(
+        `${date} の「${activityName}」を予約確定にします。よろしいですか？\n（申込者全員へ確定の通知が送られます）`
+      )
+    }
+    if (operatorStatus === 'rejected') {
+      return confirm(
+        `${date} の「${activityName}」を受付停止にします。よろしいですか？\n（この日の申込はすべて取り消され、使用されたチケットは返却されます）`
+      )
+    }
+    return true
+  }
+
   const updateStatus = async (
     row: FtAdminRow,
     operatorStatus: 'approved' | 'rejected' | 'none'
   ) => {
+    if (!confirmStatusChange(row.date, row.activityName, operatorStatus)) return
     setActionError(null)
     await patchStatus(row.activityId, row.date, operatorStatus)
     fetchRows(password)
@@ -243,6 +263,9 @@ export default function DashboardPage() {
     operatorStatus: 'approved' | 'rejected' | 'none'
   ) => {
     if (!calSelected) return
+    const activityName =
+      calActivities.find((a) => a.id === activityId)?.name ?? '利用区分'
+    if (!confirmStatusChange(calSelected, activityName, operatorStatus)) return
     setActionError(null)
     setCalBusy(true)
     await patchStatus(activityId, calSelected, operatorStatus)
@@ -253,6 +276,12 @@ export default function DashboardPage() {
 
   const calStopAll = async () => {
     if (!calSelected) return
+    if (
+      !confirm(
+        `${calSelected} の全区分を受付停止にします。よろしいですか？\n（この日の申込はすべて取り消され、使用されたチケットは返却されます）`
+      )
+    )
+      return
     setActionError(null)
     setCalBusy(true)
     for (const a of calActivities) {
