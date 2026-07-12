@@ -9,7 +9,10 @@ export default function AuthButtons() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null)
 
   useEffect(() => {
-    setLoggedIn(!!localStorage.getItem('ftUserId'))
+    const load = async () => {
+      setLoggedIn(!!localStorage.getItem('ftUserId'))
+    }
+    void load()
   }, [])
 
   const logout = () => {
