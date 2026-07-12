@@ -270,7 +270,12 @@ export default function ReserveCalendarPage() {
               const info = days[key]?.[slug]
               const state: FtDateState = info?.state ?? 'blank'
               const isPast = d < today
-              const clickable = !isPast && state !== 'rejected' && state !== 'occupied'
+              // 貸切業務は1日1社のため、確定済みの日は他の方が選択できない（講座・飛行会は相乗り可）
+              const clickable =
+                !isPast &&
+                state !== 'rejected' &&
+                state !== 'occupied' &&
+                !(slug === 'charter' && state === 'confirmed')
               return (
                 <button
                   key={key}

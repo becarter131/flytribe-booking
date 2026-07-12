@@ -81,6 +81,13 @@ export async function POST(req: NextRequest) {
   if (state === 'rejected') {
     return NextResponse.json({ error: 'この日は受付を停止しています' }, { status: 400 })
   }
+  // 貸切業務は1日1社: 確定済みの日への相乗り予約は不可（講座・飛行会は相乗り可）
+  if (activity.slug === 'charter' && state === 'confirmed') {
+    return NextResponse.json(
+      { error: 'この日はすでに貸切のご予約で確定済みのため、予約できません' },
+      { status: 400 }
+    )
+  }
 
   const current = countOf(activity.id)
   const unit = activity.slug === 'charter' ? '社' : '名'
