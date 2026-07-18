@@ -519,7 +519,7 @@ export default function DashboardPage() {
               [
                 ['login', 'ログイン'],
                 ['register', '新規登録'],
-                ['owner', '非常用'],
+                ['owner', 'オーナー用'],
               ] as const
             ).map(([m, label]) => (
               <button
@@ -661,9 +661,9 @@ export default function DashboardPage() {
 
           {authMode === 'owner' && (
             <form onSubmit={handleOwnerLogin} className="space-y-4">
-              <h1 className="text-xl font-bold text-gray-800">非常用ログイン</h1>
+              <h1 className="text-xl font-bold text-gray-800">オーナー用ログイン</h1>
               <p className="text-sm text-gray-500">
-                通常はメールアドレスでログインしてください（オーナー権限のあるアカウントは自動的にオーナーとして扱われます）。こちらはオーナーがログインできなくなった場合の非常用です。
+                オーナー専用のログインです。オーナーパスワードをお持ちの方のみご利用いただけます（オーナーの方も、普段はメールアドレスでのログインで構いません）。
               </p>
               <input
                 type="password"
