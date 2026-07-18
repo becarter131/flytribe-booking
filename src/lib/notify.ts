@@ -28,7 +28,11 @@ export async function sendMail(
 
 // 登録済みの管理者全員へ通知する
 export async function notifyAdmins(subject: string, text: string): Promise<void> {
-  const { data: admins } = await supabaseAdmin.from('ft_admins').select('email')
+  // 無効化された管理者には通知しない
+  const { data: admins } = await supabaseAdmin
+    .from('ft_admins')
+    .select('email')
+    .eq('is_active', true)
   const emails = (admins ?? []).map((a) => a.email as string)
   if (emails.length === 0) return
   await sendMail(emails, subject, text)

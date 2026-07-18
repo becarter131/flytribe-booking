@@ -6,7 +6,7 @@ import { newTicketCode } from '@/lib/ticket-code'
 
 // チケット一覧（管理者用）
 export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req)
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const [{ data: coupons }, { data: activities }] = await Promise.all([
@@ -40,7 +40,7 @@ const createSchema = z.object({
 
 // チケット発行（コードは自動生成）
 export async function POST(req: NextRequest) {
-  const denied = requireAdmin(req)
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const parsed = createSchema.safeParse(await req.json())
@@ -72,7 +72,7 @@ const patchSchema = z.object({
 
 // チケットの有効/無効切り替え
 export async function PATCH(req: NextRequest) {
-  const denied = requireAdmin(req)
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const parsed = patchSchema.safeParse(await req.json())

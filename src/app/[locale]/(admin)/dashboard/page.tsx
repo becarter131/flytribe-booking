@@ -74,22 +74,51 @@ function ymd(d: Date): string {
 
 const unitOf = (slug: string) => (slug === 'charter' ? '社' : '名')
 
+interface AdminListRow {
+  id: string
+  name: string
+  email: string
+  isActive: boolean
+  hasPassword: boolean
+}
+
+interface InviteRow {
+  id: string
+  code: string
+  expiresAt: string
+  usedAt: string | null
+  usedByName: string | null
+}
+
 export default function DashboardPage() {
+  // password = 認証クレデンシャル（管理者セッショントークン or オーナーパスワード）
   const [password, setPassword] = useState<string | null>(null)
-  const [passwordInput, setPasswordInput] = useState('')
+  const [isOwner, setIsOwner] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
   const [rows, setRows] = useState<FtAdminRow[]>([])
   const [sessionChecked, setSessionChecked] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  // 管理者アカウント（登録済みならローカルに保持）
+  // ログイン画面のモードと入力
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'owner'>('login')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [ownerPasswordInput, setOwnerPasswordInput] = useState('')
+
+  // 管理者アカウント（ログイン後に保持）
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
+  const [regInviteCode, setRegInviteCode] = useState('')
   const [regName, setRegName] = useState('')
   const [regBirthdate, setRegBirthdate] = useState('')
   const [regPhone, setRegPhone] = useState('')
   const [regEmail, setRegEmail] = useState('')
+  const [regPassword, setRegPassword] = useState('')
   const [regError, setRegError] = useState<string | null>(null)
+
+  // オーナーパネル（招待コード・管理者一覧）
+  const [invites, setInvites] = useState<InviteRow[]>([])
+  const [adminList, setAdminList] = useState<AdminListRow[]>([])
 
   const [coupons, setCoupons] = useState<FtCoupon[]>([])
   const [couponDesc, setCouponDesc] = useState('')
@@ -145,11 +174,32 @@ export default function DashboardPage() {
       }
       const saved = sessionStorage.getItem('adminPassword')
       const ok = await fetchRows(saved)
-      if (ok && saved) setPassword(saved)
+      if (ok && saved) {
+        setPassword(saved)
+        setIsOwner(sessionStorage.getItem('ftIsOwner') === '1')
+      }
       setSessionChecked(true)
     }
     void restore()
   }, [fetchRows])
+
+  // オーナーパネル用データの取得
+  const fetchOwnerPanel = useCallback(async (pw: string) => {
+    const [iRes, aRes] = await Promise.all([
+      fetch('/api/admin/ft/invites', { headers: { Authorization: `Bearer ${pw}` } }),
+      fetch('/api/admin/ft/admins', { headers: { Authorization: `Bearer ${pw}` } }),
+    ])
+    if (iRes.ok) setInvites(await iRes.json())
+    if (aRes.ok) setAdminList(await aRes.json())
+  }, [])
+
+  useEffect(() => {
+    if (!password || !isOwner) return
+    const load = async () => {
+      await fetchOwnerPanel(password)
+    }
+    void load()
+  }, [password, isOwner, fetchOwnerPanel])
 
   useEffect(() => {
     if (!password) return
@@ -159,51 +209,133 @@ export default function DashboardPage() {
     void load()
   }, [password, fetchCalendar])
 
+  // ログイン成功後の共通処理
+  const startSession = async (credential: string, profile: AdminProfile, owner: boolean) => {
+    sessionStorage.setItem('adminPassword', credential)
+    sessionStorage.setItem('ftIsOwner', owner ? '1' : '0')
+    localStorage.setItem('ftAdminProfile', JSON.stringify(profile))
+    setAdminProfile(profile)
+    setIsOwner(owner)
+    await fetchRows(credential)
+    setPassword(credential)
+  }
+
+  // 管理者ログイン（メール+パスワード → セッショントークン）
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError(null)
     setSubmitting(true)
-    const ok = await fetchRows(passwordInput)
-    if (ok) {
-      sessionStorage.setItem('adminPassword', passwordInput)
-      setPassword(passwordInput)
+    const res = await fetch('/api/admin/ft/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (res.ok && body.token) {
+      await startSession(body.token, { id: body.id, name: body.name }, false)
     } else {
-      setLoginError('パスワードが違います')
+      setLoginError(body.error ?? 'ログインに失敗しました')
     }
     setSubmitting(false)
   }
 
+  // オーナーログイン（環境変数のオーナーパスワード）
+  const handleOwnerLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError(null)
+    setSubmitting(true)
+    const ok = await fetchRows(ownerPasswordInput)
+    if (ok) {
+      await startSession(ownerPasswordInput, { id: 'owner', name: 'オーナー' }, true)
+    } else {
+      setLoginError('オーナーパスワードが違います')
+    }
+    setSubmitting(false)
+  }
+
+  // 新規管理者登録（オーナー発行の招待コードが必須）
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!password) return
     setRegError(null)
-    if (!regName.trim() || !regBirthdate || !regPhone.trim() || !regEmail.trim()) {
-      setRegError('すべての項目を入力してください')
+    if (
+      !regInviteCode.trim() ||
+      !regName.trim() ||
+      !regBirthdate ||
+      !regPhone.trim() ||
+      !regEmail.trim() ||
+      regPassword.length < 8
+    ) {
+      setRegError('すべての項目を入力してください（パスワードは8文字以上）')
       return
     }
     setSubmitting(true)
     const res = await fetch('/api/admin/ft/admins', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${password}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        inviteCode: regInviteCode.trim(),
         name: regName.trim(),
         birthdate: regBirthdate,
         phone: regPhone.trim(),
         email: regEmail.trim(),
+        password: regPassword,
       }),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) {
       setRegError(body.error ?? `エラーが発生しました (${res.status})`)
     } else {
-      const profile = { id: body.id, name: body.name }
-      localStorage.setItem('ftAdminProfile', JSON.stringify(profile))
-      setAdminProfile(profile)
+      await startSession(body.token, { id: body.id, name: body.name }, false)
     }
     setSubmitting(false)
+  }
+
+  // 招待コード発行（オーナー専用）
+  const issueInvite = async () => {
+    if (!password) return
+    setActionError(null)
+    const res = await fetch('/api/admin/ft/invites', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${password}` },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setActionError(body.error ?? `エラーが発生しました (${res.status})`)
+    } else {
+      await fetchOwnerPanel(password)
+    }
+  }
+
+  // 管理者の有効化/無効化（オーナー専用）
+  const toggleAdmin = async (admin: AdminListRow) => {
+    if (!password) return
+    if (
+      admin.isActive &&
+      !confirm(`${admin.name} さんを無効化します。以後ログインできなくなります。よろしいですか？`)
+    ) {
+      return
+    }
+    setActionError(null)
+    const res = await fetch('/api/admin/ft/admins', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ adminId: admin.id, isActive: !admin.isActive }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setActionError(body.error ?? `エラーが発生しました (${res.status})`)
+    }
+    await fetchOwnerPanel(password)
+  }
+
+  const logout = () => {
+    sessionStorage.removeItem('adminPassword')
+    sessionStorage.removeItem('ftIsOwner')
+    localStorage.removeItem('ftAdminProfile')
+    window.location.reload()
   }
 
   const patchStatus = async (
@@ -363,97 +495,174 @@ export default function DashboardPage() {
   }
 
   if (!password) {
-    return (
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <form
-          onSubmit={handleLogin}
-          className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm space-y-4"
-        >
-          <h1 className="text-xl font-bold text-gray-800">管理者ログイン</h1>
-          <input
-            type="password"
-            value={passwordInput}
-            onChange={(e) => setPasswordInput(e.target.value)}
-            placeholder="管理パスワード"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
-          />
-          {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
-          <button
-            type="submit"
-            disabled={submitting || !passwordInput}
-            className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
-          >
-            ログイン
-          </button>
-        </form>
-      </main>
-    )
-  }
-
-  // 管理者アカウント未登録なら登録フォームを表示（全項目必須）
-  if (!adminProfile) {
+    const inputCls =
+      'w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500'
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
-        <form
-          onSubmit={handleRegister}
-          className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm space-y-4"
-        >
-          <h1 className="text-xl font-bold text-gray-800">管理者アカウント登録</h1>
-          <p className="text-sm text-gray-500">
-            初回のみ、管理者情報の登録が必要です（すべて必須）。
-          </p>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">氏名</label>
-            <input
-              type="text"
-              required
-              value={regName}
-              onChange={(e) => setRegName(e.target.value)}
-              placeholder="山田 太郎"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
+        <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+          {/* モード切替タブ */}
+          <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 text-sm">
+            {(
+              [
+                ['login', 'ログイン'],
+                ['register', '新規登録'],
+                ['owner', 'オーナー'],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setAuthMode(m)
+                  setLoginError(null)
+                  setRegError(null)
+                }}
+                className={`flex-1 py-1.5 rounded-md font-medium ${
+                  authMode === m ? 'bg-white shadow text-sky-700' : 'text-gray-500'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">生年月日</label>
-            <input
-              type="date"
-              required
-              value={regBirthdate}
-              onChange={(e) => setRegBirthdate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">電話番号</label>
-            <input
-              type="tel"
-              required
-              value={regPhone}
-              onChange={(e) => setRegPhone(e.target.value)}
-              placeholder="090-0000-0000"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">メールアドレス</label>
-            <input
-              type="email"
-              required
-              value={regEmail}
-              onChange={(e) => setRegEmail(e.target.value)}
-              placeholder="admin@example.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-          {regError && <p className="text-red-500 text-sm">{regError}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
-          >
-            登録して管理画面へ
-          </button>
-        </form>
+
+          {authMode === 'login' && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <h1 className="text-xl font-bold text-gray-800">管理者ログイン</h1>
+              <input
+                type="email"
+                required
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="メールアドレス"
+                className={inputCls}
+              />
+              <input
+                type="password"
+                required
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="パスワード"
+                className={inputCls}
+              />
+              {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
+              <button
+                type="submit"
+                disabled={submitting || !loginEmail || !loginPassword}
+                className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+              >
+                ログイン
+              </button>
+            </form>
+          )}
+
+          {authMode === 'register' && (
+            <form onSubmit={handleRegister} className="space-y-3">
+              <h1 className="text-xl font-bold text-gray-800">管理者アカウント登録</h1>
+              <p className="text-sm text-gray-500">
+                オーナーから受け取った招待コードが必要です（すべて必須）。
+              </p>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">招待コード</label>
+                <input
+                  type="text"
+                  required
+                  value={regInviteCode}
+                  onChange={(e) => setRegInviteCode(e.target.value)}
+                  placeholder="8桁の英数字"
+                  className={`${inputCls} font-mono`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">氏名</label>
+                <input
+                  type="text"
+                  required
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder="山田 太郎"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">生年月日</label>
+                <input
+                  type="date"
+                  required
+                  value={regBirthdate}
+                  onChange={(e) => setRegBirthdate(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">電話番号</label>
+                <input
+                  type="tel"
+                  required
+                  value={regPhone}
+                  onChange={(e) => setRegPhone(e.target.value)}
+                  placeholder="090-0000-0000"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">メールアドレス</label>
+                <input
+                  type="email"
+                  required
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">パスワード（8文字以上）</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              {regError && <p className="text-red-500 text-sm">{regError}</p>}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+              >
+                登録して管理画面へ
+              </button>
+            </form>
+          )}
+
+          {authMode === 'owner' && (
+            <form onSubmit={handleOwnerLogin} className="space-y-4">
+              <h1 className="text-xl font-bold text-gray-800">オーナーログイン</h1>
+              <p className="text-sm text-gray-500">
+                招待コードの発行と管理者の管理ができます。
+              </p>
+              <input
+                type="password"
+                required
+                value={ownerPasswordInput}
+                onChange={(e) => setOwnerPasswordInput(e.target.value)}
+                placeholder="オーナーパスワード"
+                className={inputCls}
+              />
+              {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
+              <button
+                type="submit"
+                disabled={submitting || !ownerPasswordInput}
+                className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+              >
+                ログイン
+              </button>
+            </form>
+          )}
+        </div>
       </main>
     )
   }
@@ -473,13 +682,95 @@ export default function DashboardPage() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-800">フライトライブ 予約管理</h1>
-          <span className="text-sm text-gray-500">管理者: {adminProfile.name}</span>
+          <div className="flex items-center gap-3 text-sm text-gray-500">
+            <span>
+              {isOwner ? '👑 オーナー' : `管理者: ${adminProfile?.name ?? ''}`}
+            </span>
+            <button type="button" onClick={logout} className="underline hover:text-red-600">
+              ログアウト
+            </button>
+          </div>
         </div>
 
         {actionError && (
           <p className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
             {actionError}
           </p>
+        )}
+
+        {/* オーナーパネル: 招待コード発行・管理者管理 */}
+        {isOwner && (
+          <div className="bg-white rounded-2xl shadow p-5 mb-8 border-2 border-amber-200">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">👑 オーナー管理</h2>
+
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-gray-700 text-sm">管理者招待コード（使い捨て・7日有効）</h3>
+              <button
+                type="button"
+                onClick={issueInvite}
+                className="text-sm bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600"
+              >
+                ＋ 招待コードを発行
+              </button>
+            </div>
+            <ul className="space-y-1 mb-6">
+              {invites.map((i) => {
+                const expired = !i.usedAt && new Date(i.expiresAt) < new Date()
+                return (
+                  <li
+                    key={i.id}
+                    className="flex items-center justify-between text-sm border border-gray-200 rounded-lg px-3 py-2"
+                  >
+                    <span className={`font-mono font-bold ${i.usedAt || expired ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {i.code}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {i.usedAt
+                        ? `使用済み（${i.usedByName ?? '不明'}）`
+                        : expired
+                          ? '期限切れ'
+                          : `${new Date(i.expiresAt).toLocaleDateString('ja-JP')} まで有効`}
+                    </span>
+                  </li>
+                )
+              })}
+              {invites.length === 0 && (
+                <li className="text-sm text-gray-400">発行済みの招待コードはありません</li>
+              )}
+            </ul>
+
+            <h3 className="font-semibold text-gray-700 text-sm mb-2">管理者一覧</h3>
+            <ul className="space-y-1">
+              {adminList.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-center justify-between text-sm border border-gray-200 rounded-lg px-3 py-2"
+                >
+                  <span className={a.isActive ? 'text-gray-800' : 'text-gray-400'}>
+                    {a.name}（{a.email}）
+                    {!a.hasPassword && (
+                      <span className="text-xs text-amber-600 ml-1">旧方式・要再登録</span>
+                    )}
+                    {!a.isActive && <span className="text-xs text-red-500 ml-1">無効</span>}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleAdmin(a)}
+                    className={`text-xs px-2 py-1 rounded-lg shrink-0 ${
+                      a.isActive
+                        ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                        : 'bg-green-50 text-green-700 hover:bg-green-100'
+                    }`}
+                  >
+                    {a.isActive ? '無効化' : '有効化'}
+                  </button>
+                </li>
+              ))}
+              {adminList.length === 0 && (
+                <li className="text-sm text-gray-400">登録済みの管理者はいません</li>
+              )}
+            </ul>
+          </div>
         )}
 
         {/* 予約一覧（申込内容の詳細つき） */}

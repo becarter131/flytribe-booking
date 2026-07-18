@@ -7,7 +7,7 @@ import { mailBody, sendMail } from '@/lib/notify'
 
 // 予約リクエストのある日付の一覧（管理者用）
 export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req)
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const today = new Date().toISOString().slice(0, 10)
@@ -87,7 +87,7 @@ const patchSchema = z.object({
 
 // 日付の管理者判断を更新する（承認 / 受付停止 / 取り消し）
 export async function PATCH(req: NextRequest) {
-  const denied = requireAdmin(req)
+  const denied = await requireAdmin(req)
   if (denied) return denied
 
   const parsed = patchSchema.safeParse(await req.json())
