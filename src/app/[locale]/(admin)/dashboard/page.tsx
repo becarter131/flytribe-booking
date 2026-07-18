@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 
 interface RequestDetail {
   userName: string | null
@@ -565,6 +566,14 @@ export default function DashboardPage() {
               >
                 ログイン
               </button>
+              <p className="text-right">
+                <Link
+                  href="/ja/reset-password?kind=admin"
+                  className="text-sm text-sky-600 hover:underline"
+                >
+                  パスワードをお忘れの方はこちら
+                </Link>
+              </p>
             </form>
           )}
 

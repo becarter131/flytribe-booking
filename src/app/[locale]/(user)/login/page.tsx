@@ -79,6 +79,15 @@ export default function LoginPage() {
           >
             {submitting ? 'ログイン中...' : 'ログイン'}
           </button>
+
+          <p className="text-right">
+            <Link
+              href="/ja/reset-password"
+              className="text-sm text-sky-600 hover:underline"
+            >
+              パスワードをお忘れの方はこちら
+            </Link>
+          </p>
         </form>
 
         <div className="border-t border-gray-100 mt-6 pt-5 text-center">
