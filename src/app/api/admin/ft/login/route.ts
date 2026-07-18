@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   const { data: admin } = await supabaseAdmin
     .from('ft_admins')
-    .select('id, name, email, password_hash, is_active')
+    .select('id, name, email, password_hash, is_active, is_owner')
     .eq('email', email)
     .maybeSingle()
 
@@ -46,5 +46,11 @@ export async function POST(req: NextRequest) {
     .delete()
     .lt('expires_at', new Date().toISOString())
 
-  return NextResponse.json({ id: admin.id, name: admin.name, email: admin.email, token })
+  return NextResponse.json({
+    id: admin.id,
+    name: admin.name,
+    email: admin.email,
+    isOwner: admin.is_owner,
+    token,
+  })
 }

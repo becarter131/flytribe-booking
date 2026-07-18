@@ -79,6 +79,7 @@ interface AdminListRow {
   name: string
   email: string
   isActive: boolean
+  isOwner: boolean
   hasPassword: boolean
 }
 
@@ -232,7 +233,8 @@ export default function DashboardPage() {
     })
     const body = await res.json().catch(() => ({}))
     if (res.ok && body.token) {
-      await startSession(body.token, { id: body.id, name: body.name }, false)
+      // オーナーフラグ付き管理者はそのままオーナーとして扱う
+      await startSession(body.token, { id: body.id, name: body.name }, body.isOwner === true)
     } else {
       setLoginError(body.error ?? 'ログインに失敗しました')
     }
@@ -285,7 +287,7 @@ export default function DashboardPage() {
     if (!res.ok) {
       setRegError(body.error ?? `エラーが発生しました (${res.status})`)
     } else {
-      await startSession(body.token, { id: body.id, name: body.name }, false)
+      await startSession(body.token, { id: body.id, name: body.name }, body.isOwner === true)
     }
     setSubmitting(false)
   }
@@ -306,12 +308,22 @@ export default function DashboardPage() {
     }
   }
 
-  // 管理者の有効化/無効化（オーナー専用）
-  const toggleAdmin = async (admin: AdminListRow) => {
+  // 管理者の有効化/無効化・オーナー権限の付与/解除（オーナー専用）
+  const patchAdmin = async (admin: AdminListRow, change: { isActive?: boolean; isOwner?: boolean }) => {
     if (!password) return
     if (
-      admin.isActive &&
+      change.isActive === false &&
       !confirm(`${admin.name} さんを無効化します。以後ログインできなくなります。よろしいですか？`)
+    ) {
+      return
+    }
+    if (
+      change.isOwner !== undefined &&
+      !confirm(
+        change.isOwner
+          ? `${admin.name} さんにオーナー権限を付与します。招待コード発行や管理者の管理ができるようになります。よろしいですか？`
+          : `${admin.name} さんのオーナー権限を解除します。よろしいですか？`
+      )
     ) {
       return
     }
@@ -322,7 +334,7 @@ export default function DashboardPage() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${password}`,
       },
-      body: JSON.stringify({ adminId: admin.id, isActive: !admin.isActive }),
+      body: JSON.stringify({ adminId: admin.id, ...change }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
@@ -506,7 +518,7 @@ export default function DashboardPage() {
               [
                 ['login', 'ログイン'],
                 ['register', '新規登録'],
-                ['owner', 'オーナー'],
+                ['owner', '非常用'],
               ] as const
             ).map(([m, label]) => (
               <button
@@ -640,9 +652,9 @@ export default function DashboardPage() {
 
           {authMode === 'owner' && (
             <form onSubmit={handleOwnerLogin} className="space-y-4">
-              <h1 className="text-xl font-bold text-gray-800">オーナーログイン</h1>
+              <h1 className="text-xl font-bold text-gray-800">非常用ログイン</h1>
               <p className="text-sm text-gray-500">
-                招待コードの発行と管理者の管理ができます。
+                通常はメールアドレスでログインしてください（オーナー権限のあるアカウントは自動的にオーナーとして扱われます）。こちらはオーナーがログインできなくなった場合の非常用です。
               </p>
               <input
                 type="password"
@@ -744,26 +756,36 @@ export default function DashboardPage() {
               {adminList.map((a) => (
                 <li
                   key={a.id}
-                  className="flex items-center justify-between text-sm border border-gray-200 rounded-lg px-3 py-2"
+                  className="flex items-center justify-between gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2"
                 >
                   <span className={a.isActive ? 'text-gray-800' : 'text-gray-400'}>
+                    {a.isOwner && <span className="mr-1">👑</span>}
                     {a.name}（{a.email}）
                     {!a.hasPassword && (
                       <span className="text-xs text-amber-600 ml-1">旧方式・要再登録</span>
                     )}
                     {!a.isActive && <span className="text-xs text-red-500 ml-1">無効</span>}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleAdmin(a)}
-                    className={`text-xs px-2 py-1 rounded-lg shrink-0 ${
-                      a.isActive
-                        ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                        : 'bg-green-50 text-green-700 hover:bg-green-100'
-                    }`}
-                  >
-                    {a.isActive ? '無効化' : '有効化'}
-                  </button>
+                  <span className="flex gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => patchAdmin(a, { isOwner: !a.isOwner })}
+                      className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    >
+                      {a.isOwner ? '👑解除' : '👑付与'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => patchAdmin(a, { isActive: !a.isActive })}
+                      className={`text-xs px-2 py-1 rounded-lg ${
+                        a.isActive
+                          ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                          : 'bg-green-50 text-green-700 hover:bg-green-100'
+                      }`}
+                    >
+                      {a.isActive ? '無効化' : '有効化'}
+                    </button>
+                  </span>
                 </li>
               ))}
               {adminList.length === 0 && (

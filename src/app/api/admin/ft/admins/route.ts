@@ -95,10 +95,13 @@ export async function POST(req: NextRequest) {
 
   const { data: admin } = await supabaseAdmin
     .from('ft_admins')
-    .select('id, name, email')
+    .select('id, name, email, is_owner')
     .eq('id', adminId)
     .single()
-  return NextResponse.json({ ...admin, token }, { status: 201 })
+  return NextResponse.json(
+    { id: admin?.id, name: admin?.name, email: admin?.email, isOwner: admin?.is_owner ?? false, token },
+    { status: 201 }
+  )
 }
 
 // 登録済み管理者の一覧（管理者・オーナー共通）
@@ -108,7 +111,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('ft_admins')
-    .select('id, name, email, is_active, password_hash, created_at')
+    .select('id, name, email, is_active, is_owner, password_hash, created_at')
     .order('created_at')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(
@@ -117,6 +120,7 @@ export async function GET(req: NextRequest) {
       name: a.name,
       email: a.email,
       isActive: a.is_active,
+      isOwner: a.is_owner,
       hasPassword: !!a.password_hash,
       createdAt: a.created_at,
     }))
@@ -125,27 +129,56 @@ export async function GET(req: NextRequest) {
 
 const patchSchema = z.object({
   adminId: z.uuid(),
-  isActive: z.boolean(),
+  isActive: z.boolean().optional(),
+  isOwner: z.boolean().optional(),
 })
 
-// 管理者の有効化/無効化（オーナー専用）。無効化するとセッションも失効させる
+// 管理者の有効化/無効化・オーナー権限の付与/解除（オーナー専用）。
+// 無効化するとセッションも失効させる
 export async function PATCH(req: NextRequest) {
-  const denied = requireOwner(req)
+  const denied = await requireOwner(req)
   if (denied) return denied
 
   const parsed = patchSchema.safeParse(await req.json())
   if (!parsed.success) {
     return NextResponse.json({ error: '入力内容を確認してください' }, { status: 400 })
   }
-  const { adminId, isActive } = parsed.data
+  const { adminId, isActive, isOwner } = parsed.data
+  if (isActive === undefined && isOwner === undefined) {
+    return NextResponse.json({ error: '変更内容がありません' }, { status: 400 })
+  }
 
-  const { error } = await supabaseAdmin
-    .from('ft_admins')
-    .update({ is_active: isActive })
-    .eq('id', adminId)
+  // 最後の有効なオーナーからオーナー権限を外す・無効化することはできない
+  // （非常用パスワードはあるが、誤操作でオーナー不在になるのを防ぐ）
+  if (isOwner === false || isActive === false) {
+    const { data: target } = await supabaseAdmin
+      .from('ft_admins')
+      .select('is_owner')
+      .eq('id', adminId)
+      .single()
+    if (target?.is_owner) {
+      const { count } = await supabaseAdmin
+        .from('ft_admins')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_owner', true)
+        .eq('is_active', true)
+        .neq('id', adminId)
+      if (!count) {
+        return NextResponse.json(
+          { error: '最後のオーナーを無効化・降格することはできません' },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
+  const update: Record<string, boolean> = {}
+  if (isActive !== undefined) update.is_active = isActive
+  if (isOwner !== undefined) update.is_owner = isOwner
+  const { error } = await supabaseAdmin.from('ft_admins').update(update).eq('id', adminId)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  if (!isActive) {
+  if (isActive === false) {
     await supabaseAdmin.from('ft_admin_sessions').delete().eq('admin_id', adminId)
   }
   return NextResponse.json({ ok: true })

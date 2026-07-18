@@ -5,7 +5,7 @@ import { newTicketCode } from '@/lib/ticket-code'
 
 // 管理者招待コードの発行（オーナー専用・使い捨て・有効期限7日）
 export async function POST(req: NextRequest) {
-  const denied = requireOwner(req)
+  const denied = await requireOwner(req)
   if (denied) return denied
 
   const code = newTicketCode()
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
 // 招待コードの一覧（オーナー専用）
 export async function GET(req: NextRequest) {
-  const denied = requireOwner(req)
+  const denied = await requireOwner(req)
   if (denied) return denied
 
   const { data, error } = await supabaseAdmin
