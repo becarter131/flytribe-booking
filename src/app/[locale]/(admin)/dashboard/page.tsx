@@ -805,7 +805,10 @@ export default function DashboardPage() {
         )}
 
         {/* 予約一覧（申込内容の詳細つき） */}
-        <h2 className="text-xl font-bold text-gray-800 mb-4">予約一覧</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-1">予約一覧</h2>
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+          ⚠️ 同じ日付の申し込みが複数ある場合、いずれか1件を承認した時点で、残りの申し込みは必ず受付停止にしてください。
+        </p>
         <div className="space-y-3">
           {rows.map((row) => {
             const s = STATE_LABEL[row.state] ?? STATE_LABEL.blank
