@@ -726,6 +726,9 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-800">フライトライブ 予約管理</h1>
           <div className="flex items-center gap-3 text-sm text-gray-500">
+            <Link href="/ja/dashboard/spec" className="text-sky-600 hover:underline">
+              📘 総合仕様書
+            </Link>
             <span>
               {isOwner ? '👑 オーナー' : `管理者: ${adminProfile?.name ?? ''}`}
             </span>
