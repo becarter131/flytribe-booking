@@ -1,0 +1,23 @@
+name: 脆弱性スキャン（npm audit）
+
+# 依存パッケージの脆弱性を定期的に診断する（セキュリティ・チェックリスト対応）。
+# 毎週月曜 9:00 JST（= 日曜 0:00 UTC）に実行。手動実行も可能。
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'package-lock.json'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # 中程度以上の脆弱性が見つかったら失敗させ、GitHub 上で通知する
+      - name: npm audit
+        run: npm audit --audit-level=moderate

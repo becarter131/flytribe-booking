@@ -169,7 +169,8 @@ const APIS: [string, string, string, string][] = [
   ['POST', '/api/admin/ft/admins', '招待コード', '管理者登録（登録後そのままログイン状態）'],
   ['GET', '/api/admin/ft/admins', '管理者', '管理者一覧'],
   ['PATCH', '/api/admin/ft/admins', 'オーナー', '管理者の有効化/無効化・オーナー権限の付与/解除'],
-  ['POST', '/api/admin/ft/login', '不要', '管理者ログイン（30日セッショントークン発行）'],
+  ['POST', '/api/admin/ft/login', '不要', '管理者ログイン第1段階（PW検証→確認コードをメール送信・アカウントロック付き）'],
+  ['POST', '/api/admin/ft/login/verify', '不要', '管理者ログイン第2段階（確認コード検証→セッション発行）'],
   ['GET/POST', '/api/admin/ft/invites', 'オーナー', '招待コードの一覧・発行'],
 ]
 
@@ -346,6 +347,7 @@ export default function SpecPage() {
                 ['STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET', 'Stripe 決済・Webhook 署名検証'],
                 ['RESEND_API_KEY / MAIL_FROM', 'メール送信'],
                 ['CRON_SECRET', '定時処理エンドポイントの認証'],
+                ['DASHBOARD_BASIC_USER / DASHBOARD_BASIC_PASS', '管理画面のベーシック認証（共通ゲート）'],
               ].map(([k, v]) => (
                 <tr key={k}>
                   <th className={`${TH_CLS} w-80 font-mono text-xs`}>{k}</th>
@@ -465,6 +467,19 @@ export default function SpecPage() {
             補足: 最後の有効なオーナーの降格・無効化はシステムがブロックする。管理者を無効化すると既存セッションは即失効し、通知メールの対象からも外れる。
             パスワード再設定はメールで1時間有効の使い捨てリンクを送付（管理者の再設定時は全セッション失効）。
           </p>
+
+          <h3 className={H3_CLS}>■ セキュリティ対策（クレジット決済のための多層防御）</h3>
+          <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+            <li><strong>カード情報を保持しない</strong>: 決済は Stripe のホスト型画面で完結し、カード番号等は当システムに保存されない</li>
+            <li><strong>管理画面へのアクセス制限</strong>: /ja/dashboard 配下に HTTP ベーシック認証（middleware・環境変数 DASHBOARD_BASIC_USER/PASS）</li>
+            <li><strong>管理者ログインの2段階認証</strong>: パスワード認証後、メールで6桁の確認コード（10分有効・使い捨て）を送信し、検証後にセッション発行</li>
+            <li><strong>アカウントロック</strong>: 管理者ログインは直近10分に10回失敗で一時ロック（ft_admin_login_failures）</li>
+            <li><strong>チケットコードの誤入力対策</strong>: 10分に10回失敗で一時ブロック（ft_code_failures）</li>
+            <li><strong>脆弱性診断</strong>: GitHub Actions で毎週 npm audit（依存パッケージの脆弱性を自動検査）</li>
+            <li><strong>入力検証・XSS/SQLi対策</strong>: 全API入力を Zod で検証、Supabase のパラメータ化クエリ・React の自動エスケープ</li>
+            <li><strong>カードテスティング対策</strong>: Stripe が有効性確認の回数を自動制限（Stripe Checkout 利用）</li>
+            <li>公開ディレクトリに機密ファイルを置かない構成（Next.js/Vercel）。ファイルアップロード機能なし</li>
+          </ul>
 
           <h3 className={H3_CLS}>■ メール通知一覧</h3>
           <table className={TABLE_CLS}>

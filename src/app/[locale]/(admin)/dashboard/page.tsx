@@ -118,6 +118,9 @@ export default function DashboardPage() {
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [ownerPasswordInput, setOwnerPasswordInput] = useState('')
+  // 2段階認証（メールOTP）
+  const [otpStep, setOtpStep] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
 
   // 管理者アカウント（ログイン後に保持）
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
@@ -233,7 +236,7 @@ export default function DashboardPage() {
     setPassword(credential)
   }
 
-  // 管理者ログイン（メール+パスワード → セッショントークン）
+  // 管理者ログイン 第1段階（メール+パスワード → 確認コードをメール送信）
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError(null)
@@ -244,11 +247,31 @@ export default function DashboardPage() {
       body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword }),
     })
     const body = await res.json().catch(() => ({}))
+    if (res.ok && body.otpRequired) {
+      setOtpStep(true)
+      setOtpCode('')
+    } else {
+      setLoginError(body.error ?? 'ログインに失敗しました')
+    }
+    setSubmitting(false)
+  }
+
+  // 管理者ログイン 第2段階（メールの確認コード → セッショントークン）
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError(null)
+    setSubmitting(true)
+    const res = await fetch('/api/admin/ft/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: loginEmail.trim(), code: otpCode.trim() }),
+    })
+    const body = await res.json().catch(() => ({}))
     if (res.ok && body.token) {
       // オーナーフラグ付き管理者はそのままオーナーとして扱う
       await startSession(body.token, { id: body.id, name: body.name }, body.isOwner === true)
     } else {
-      setLoginError(body.error ?? 'ログインに失敗しました')
+      setLoginError(body.error ?? '確認コードの検証に失敗しました')
     }
     setSubmitting(false)
   }
@@ -561,7 +584,44 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {authMode === 'login' && (
+          {authMode === 'login' && otpStep && (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <h1 className="text-xl font-bold text-gray-800">確認コードの入力</h1>
+              <p className="text-sm text-gray-500">
+                {loginEmail} に確認コードを送信しました（10分間有効）。メールに記載の6桁の数字を入力してください。
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                required
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                className={`${inputCls} text-center text-lg tracking-[0.5em] font-mono`}
+              />
+              {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
+              <button
+                type="submit"
+                disabled={submitting || otpCode.length !== 6}
+                className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+              >
+                ログイン
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpStep(false)
+                  setLoginError(null)
+                }}
+                className="w-full text-sm text-gray-500 hover:text-sky-700"
+              >
+                ← メールアドレスの入力に戻る
+              </button>
+            </form>
+          )}
+
+          {authMode === 'login' && !otpStep && (
             <form onSubmit={handleLogin} className="space-y-4">
               <h1 className="text-xl font-bold text-gray-800">管理者ログイン</h1>
               <input
@@ -586,7 +646,7 @@ export default function DashboardPage() {
                 disabled={submitting || !loginEmail || !loginPassword}
                 className="w-full bg-sky-600 text-white py-2 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
               >
-                ログイン
+                確認コードを送信
               </button>
               <p className="text-right">
                 <Link
