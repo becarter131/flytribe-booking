@@ -354,7 +354,8 @@ export default function DashboardPage() {
   const patchStatus = async (
     activityId: string,
     date: string,
-    operatorStatus: 'approved' | 'rejected' | 'none'
+    operatorStatus: 'approved' | 'rejected' | 'none',
+    scope: 'activity' | 'date'
   ) => {
     if (!password) return false
     const res = await fetch('/api/admin/ft', {
@@ -363,7 +364,7 @@ export default function DashboardPage() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${password}`,
       },
-      body: JSON.stringify({ activityId, date, operatorStatus }),
+      body: JSON.stringify({ activityId, date, operatorStatus, scope }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
@@ -377,7 +378,8 @@ export default function DashboardPage() {
   const confirmStatusChange = (
     date: string,
     activityName: string,
-    operatorStatus: 'approved' | 'rejected' | 'none'
+    operatorStatus: 'approved' | 'rejected' | 'none',
+    scope: 'activity' | 'date'
   ): boolean => {
     if (operatorStatus === 'approved') {
       return confirm(
@@ -385,25 +387,34 @@ export default function DashboardPage() {
       )
     }
     if (operatorStatus === 'rejected') {
-      return confirm(
-        `${date} を受付停止にします。よろしいですか？\n（3種類すべての利用区分が受付停止になり、この日の申込はすべて取り消され、使用されたチケットは返却されます）`
-      )
+      return scope === 'date'
+        ? confirm(
+            `${date} を受付停止にします。よろしいですか？\n（3種類すべての利用区分が受付停止になり、この日の申込はすべて取り消され、使用されたチケットは返却されます）`
+          )
+        : confirm(
+            `${date} の「${activityName}」を受付停止にします。よろしいですか？\n（この区分の申込のみ取り消され、使用されたチケットは返却されます。他の区分には影響しません）`
+          )
     }
     if (operatorStatus === 'none') {
-      return confirm(
-        `${date} の受付停止を取り消します。よろしいですか？\n（全区分の受付停止が解除されます。取り消された申込は元に戻りません）`
-      )
+      return scope === 'date'
+        ? confirm(
+            `${date} の受付停止を取り消します。よろしいですか？\n（全区分の受付停止が解除されます。取り消された申込は元に戻りません）`
+          )
+        : confirm(
+            `${date} の「${activityName}」の受付停止を取り消します。よろしいですか？\n（取り消された申込は元に戻りません）`
+          )
     }
     return true
   }
 
+  // 予約一覧: 申し込み（区分×日付）単位で操作する。他の区分には影響しない
   const updateStatus = async (
     row: FtAdminRow,
     operatorStatus: 'approved' | 'rejected' | 'none'
   ) => {
-    if (!confirmStatusChange(row.date, row.activityName, operatorStatus)) return
+    if (!confirmStatusChange(row.date, row.activityName, operatorStatus, 'activity')) return
     setActionError(null)
-    await patchStatus(row.activityId, row.date, operatorStatus)
+    await patchStatus(row.activityId, row.date, operatorStatus, 'activity')
     fetchRows(password)
     fetchCalendar()
   }
@@ -415,22 +426,22 @@ export default function DashboardPage() {
     if (!calSelected) return
     const activityName =
       calActivities.find((a) => a.id === activityId)?.name ?? '利用区分'
-    if (!confirmStatusChange(calSelected, activityName, operatorStatus)) return
+    if (!confirmStatusChange(calSelected, activityName, operatorStatus, 'activity')) return
     setActionError(null)
     setCalBusy(true)
-    await patchStatus(activityId, calSelected, operatorStatus)
+    await patchStatus(activityId, calSelected, operatorStatus, 'activity')
     await fetchCalendar()
     fetchRows(password)
     setCalBusy(false)
   }
 
-  // 受付停止は日付単位（API側で全区分に適用される）
+  // カレンダー管理: 日付単位（全区分一括）で受付停止する
   const calStopDay = async () => {
     if (!calSelected || calActivities.length === 0) return
-    if (!confirmStatusChange(calSelected, '', 'rejected')) return
+    if (!confirmStatusChange(calSelected, '', 'rejected', 'date')) return
     setActionError(null)
     setCalBusy(true)
-    await patchStatus(calActivities[0].id, calSelected, 'rejected')
+    await patchStatus(calActivities[0].id, calSelected, 'rejected', 'date')
     await fetchCalendar()
     fetchRows(password)
     setCalBusy(false)
@@ -438,10 +449,10 @@ export default function DashboardPage() {
 
   const calLiftDay = async () => {
     if (!calSelected || calActivities.length === 0) return
-    if (!confirmStatusChange(calSelected, '', 'none')) return
+    if (!confirmStatusChange(calSelected, '', 'none', 'date')) return
     setActionError(null)
     setCalBusy(true)
-    await patchStatus(calActivities[0].id, calSelected, 'none')
+    await patchStatus(calActivities[0].id, calSelected, 'none', 'date')
     await fetchCalendar()
     fetchRows(password)
     setCalBusy(false)

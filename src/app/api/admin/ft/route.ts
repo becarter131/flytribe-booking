@@ -83,6 +83,8 @@ const patchSchema = z.object({
   activityId: z.uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   operatorStatus: z.enum(['none', 'approved', 'rejected']),
+  // 受付停止・取り消しの範囲: activity=対象の区分のみ（予約一覧） / date=全区分一括（カレンダー）
+  scope: z.enum(['activity', 'date']).optional().default('activity'),
 })
 
 // 日付の管理者判断を更新する（承認 / 受付停止 / 取り消し）
@@ -94,7 +96,7 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: '入力内容を確認してください' }, { status: 400 })
   }
-  const { activityId, date, operatorStatus } = parsed.data
+  const { activityId, date, operatorStatus, scope } = parsed.data
 
   // 承認する場合: 最低催行人数チェック + 同日に他区分の確定があると二重確定になるためブロック
   if (operatorStatus === 'approved') {
@@ -177,16 +179,26 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ===== 受付停止（全区分が対象） =====
+  // ===== 受付停止 =====
+  // scope=date: 全区分一括（カレンダーの「この日を受付停止」）
+  // scope=activity: 対象の区分のみ（予約一覧の個別停止。他区分の確定・申込には影響しない）
   if (operatorStatus === 'rejected') {
     const { data: allActivities } = await supabaseAdmin
       .from('ft_activities')
       .select('id, name')
       .eq('is_active', true)
     const nameOf = new Map((allActivities ?? []).map((a) => [a.id, a.name as string]))
+    const targets =
+      scope === 'date'
+        ? (allActivities ?? [])
+        : (allActivities ?? []).filter((a) => a.id === activityId)
+    if (targets.length === 0) {
+      return NextResponse.json({ error: '対象の利用区分が見つかりません' }, { status: 400 })
+    }
+    const targetIds = targets.map((a) => a.id)
 
     const { error } = await supabaseAdmin.from('ft_dates').upsert(
-      (allActivities ?? []).map((a) => ({
+      targets.map((a) => ({
         activity_id: a.id,
         date,
         operator_status: 'rejected',
@@ -195,12 +207,13 @@ export async function PATCH(req: NextRequest) {
     )
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    // 全区分の申込を「受付停止」扱いにし、使用済みチケットの回数を戻す
+    // 対象区分の申込を「受付停止」扱いにし、使用済みチケットの回数を戻す
     const { data: affected } = await supabaseAdmin
       .from('ft_requests')
       .select('id, activity_id, user:ft_users(name, email)')
       .eq('date', date)
       .eq('status', 'active')
+      .in('activity_id', targetIds)
     for (const r of affected ?? []) {
       await supabaseAdmin.from('ft_requests').update({ status: 'rejected' }).eq('id', r.id)
       const { data: usedCoupons } = await supabaseAdmin
@@ -239,12 +252,15 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ===== 停止の取り消し（全区分の受付停止を解除。確定は変更しない） =====
-  const { error } = await supabaseAdmin
+  // ===== 停止の取り消し（受付停止のみ解除。確定は変更しない） =====
+  // scope=date: 全区分 / scope=activity: 対象の区分のみ
+  let lift = supabaseAdmin
     .from('ft_dates')
     .update({ operator_status: 'none' })
     .eq('date', date)
     .eq('operator_status', 'rejected')
+  if (scope === 'activity') lift = lift.eq('activity_id', activityId)
+  const { error } = await lift
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   return NextResponse.json({ ok: true })
