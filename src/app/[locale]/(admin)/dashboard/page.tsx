@@ -10,6 +10,7 @@ interface RequestDetail {
   partySize: number
   couponCodes: string[]
   createdAt: string
+  status: 'active' | 'rejected'
 }
 
 interface FtAdminRow {
@@ -824,10 +825,11 @@ export default function DashboardPage() {
           {rows.map((row) => {
             const s = STATE_LABEL[row.state] ?? STATE_LABEL.blank
             const unit = unitOf(row.activitySlug)
+            const isStopped = row.state === 'rejected'
             return (
               <div
                 key={`${row.activityId}-${row.date}`}
-                className="bg-white rounded-2xl shadow p-4"
+                className={`rounded-2xl shadow p-4 ${isStopped ? 'bg-gray-100 opacity-70' : 'bg-white'}`}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -864,9 +866,9 @@ export default function DashboardPage() {
                     {row.state === 'rejected' && (
                       <button
                         onClick={() => updateStatus(row, 'none')}
-                        className="text-sm bg-gray-500 text-white px-3 py-1 rounded-lg hover:bg-gray-600"
+                        className="text-sm bg-gray-600 text-white px-3 py-1 rounded-lg hover:bg-gray-700"
                       >
-                        停止を取り消す
+                        受付停止を取り消す
                       </button>
                     )}
                   </div>
@@ -882,19 +884,30 @@ export default function DashboardPage() {
                       {row.requests.map((r, i) => (
                         <li
                           key={i}
-                          className="text-sm text-gray-700 flex flex-wrap items-center gap-x-3 gap-y-0.5"
+                          className={`text-sm flex flex-wrap items-center gap-x-3 gap-y-0.5 ${
+                            r.status === 'rejected' ? 'text-gray-400' : 'text-gray-700'
+                          }`}
                         >
+                          {r.status === 'rejected' && (
+                            <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">
+                              受付停止
+                            </span>
+                          )}
                           <span className="font-medium">{r.userName ?? '（不明）'}</span>
-                          <span className="text-gray-500 text-xs">{r.userEmail}</span>
+                          <span className={`text-xs ${r.status === 'rejected' ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {r.userEmail}
+                          </span>
                           {r.userPhone && (
-                            <span className="text-gray-500 text-xs">📞 {r.userPhone}</span>
+                            <span className={`text-xs ${r.status === 'rejected' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              📞 {r.userPhone}
+                            </span>
                           )}
                           <span>
                             {r.partySize}
                             {unit}
                           </span>
                           {r.couponCodes.length > 0 && (
-                            <span className="font-mono text-xs text-sky-600">
+                            <span className={`font-mono text-xs ${r.status === 'rejected' ? 'text-gray-400 line-through' : 'text-sky-600'}`}>
                               {r.couponCodes.join(', ')}
                             </span>
                           )}

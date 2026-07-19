@@ -28,15 +28,20 @@ export async function GET(req: NextRequest) {
   const operator = new Map<string, 'none' | 'approved' | 'rejected'>()
   for (const d of dates ?? []) operator.set(`${d.activity_id}|${d.date}`, d.operator_status)
 
+  // 受付停止（rejected）の申込もグレーアウト表示するため行に含める。
+  // ユーザー都合キャンセル（cancelled）は表示しない
   const counts = new Map<string, number>()
+  const keys = new Set<string>()
   const details = new Map<
     string,
-    { userName: string | null; userEmail: string | null; userPhone: string | null; partySize: number; couponCodes: string[]; createdAt: string }[]
+    { userName: string | null; userEmail: string | null; userPhone: string | null; partySize: number; couponCodes: string[]; createdAt: string; status: string }[]
   >()
   for (const r of requests ?? []) {
-    if (r.status !== 'active') continue
+    if (r.status === 'cancelled') continue
     const key = `${r.activity_id}|${r.date}`
-    counts.set(key, (counts.get(key) ?? 0) + r.party_size)
+    keys.add(key)
+    // 人数（催行判定）は有効な申込のみカウント
+    if (r.status === 'active') counts.set(key, (counts.get(key) ?? 0) + r.party_size)
     const user = r.user as unknown as { name: string; email: string; phone: string | null } | null
     const usedCoupons = (r.coupons ?? []) as unknown as {
       uses: number
@@ -52,12 +57,14 @@ export async function GET(req: NextRequest) {
         .filter((c) => c.coupon)
         .map((c) => (c.uses > 1 ? `${c.coupon!.code}×${c.uses}` : c.coupon!.code)),
       createdAt: r.created_at,
+      status: r.status,
     })
     details.set(key, list)
   }
 
   const rows = []
-  for (const [key, count] of counts) {
+  for (const key of keys) {
+    const count = counts.get(key) ?? 0
     const [activityId, date] = key.split('|')
     const activity = (activities ?? []).find((a) => a.id === activityId)
     if (!activity) continue
