@@ -159,6 +159,7 @@ const APIS: [string, string, string, string][] = [
   ['GET', '/api/ft/my-tickets', '不要', '自分のチケット一覧'],
   ['GET', '/api/ft/course-items', '不要', '講座料金マスタ'],
   ['GET', '/api/ft/shop/products', '不要', '利用券マスタ'],
+  ['POST', '/api/ft/contact', '不要', 'お問い合わせ受付（info@ へ転送・受付メール自動返信・ハニーポット付き）'],
   ['POST', '/api/ft/shop/checkout', '不要', 'ショップ購入（Stripe Checkout / 銀行振込）'],
   ['GET', '/api/ft/shop/orders/[id]', '不要', '注文状況（購入完了画面用）'],
   ['POST', '/api/webhooks/stripe', 'Stripe署名', '決済完了→チケット発行（銀行振込は async_payment_succeeded）'],
@@ -180,6 +181,7 @@ const MAILS: [string, string, string][] = [
   ['利用の前日 朝9時', '確定予約の申込者・管理者全員', '明日のご利用案内 / 確定予約サマリー'],
   ['予約不成立時（翌朝9時）', '対象の申込者', '催行人数未達で不成立・チケット返却の案内'],
   ['パスワード再設定申請時', '申請者', '再設定リンク（1時間有効・1回のみ）'],
+  ['お問い合わせ送信時', 'info@flytribe.co.jp・問い合わせ者', '内容の転送（返信先=問い合わせ者）/ 受付確認の自動返信'],
 ]
 
 const SECTION_CLS = 'bg-white rounded-2xl shadow p-6 mb-6 scroll-mt-20'
@@ -372,6 +374,7 @@ export default function SpecPage() {
               {[
                 ['/ja', 'トップ', '3区分の入口・ログイン状態表示'],
                 ['/ja/services/[区分]', 'サービス詳細', '各区分の料金・利用の流れ・施設案内（敷地範囲/入場方法/電気・建物 ※一部【仮】）'],
+                ['/ja/contact', 'お問い合わせ', '氏名・メール・電話(任意)・内容 → info@flytribe.co.jp へ転送+受付メール自動返信'],
                 ['/ja/register', '会員登録', '氏名・法人名(任意)・メール・電話・生年月日・パスワード(8+)'],
                 ['/ja/login', 'ログイン', 'メール+パスワード。パスワード再設定への導線あり'],
                 ['/ja/reset-password', 'パスワード再設定', '利用者・管理者共用（?kind=admin で管理者向け）'],

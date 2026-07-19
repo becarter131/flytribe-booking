@@ -219,7 +219,11 @@ export default async function ServiceDetailPage({
         </div>
 
         <p className="text-xs text-gray-400 text-center">
-          ※【仮】の項目は正式なご案内に順次差し替えます。ご不明点はお問い合わせください。
+          ※【仮】の項目は正式なご案内に順次差し替えます。ご不明点は
+          <Link href="/ja/contact" className="text-sky-600 hover:underline">
+            お問い合わせフォーム
+          </Link>
+          からご連絡ください。
         </p>
       </div>
     </main>

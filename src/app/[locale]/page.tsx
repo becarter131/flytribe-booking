@@ -80,9 +80,13 @@ export default async function HomePage() {
           </div>
         </Link>
 
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500 mb-6">
           ※ いずれかの利用区分で確定した日は、他の区分ではご予約いただけません
         </p>
+
+        <Link href="/ja/contact" className="text-sm text-sky-600 hover:underline">
+          ✉️ お問い合わせはこちら
+        </Link>
       </div>
     </main>
   )

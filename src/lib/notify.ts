@@ -26,6 +26,38 @@ export async function sendMail(
   }
 }
 
+// 差出人・返信先を指定して送るメール（お問い合わせ用など）。
+// from は Resend で認証済みの flytribe.co.jp ドメインのアドレスに限る
+export async function sendMailAs(opts: {
+  from: string
+  to: string | string[]
+  subject: string
+  text: string
+  replyTo?: string
+}): Promise<void> {
+  const key = process.env.RESEND_API_KEY
+  const recipients = (Array.isArray(opts.to) ? opts.to : [opts.to]).filter(Boolean)
+  if (!key || recipients.length === 0) return
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        from: opts.from,
+        to: recipients,
+        subject: opts.subject,
+        text: opts.text,
+        ...(opts.replyTo && { reply_to: opts.replyTo }),
+      }),
+    })
+  } catch {
+    // 通知失敗は無視
+  }
+}
+
 // 登録済みの管理者全員へ通知する
 export async function notifyAdmins(subject: string, text: string): Promise<void> {
   // 無効化された管理者には通知しない
