@@ -28,22 +28,29 @@ export default async function HomePage() {
 
         <div className="space-y-4 mb-12">
           {((activities ?? []) as FtActivity[]).map((a) => (
-            <Link
+            <div
               key={a.slug}
-              href={`/ja/reserve/${a.slug}`}
-              className="block bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition-shadow text-left"
+              className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow text-left overflow-hidden"
             >
-              <div className="flex items-center gap-4">
-                <div className="text-4xl">{ICONS[a.slug] ?? '📅'}</div>
-                <div>
-                  <h2 className="font-bold text-lg text-gray-800">{a.name}</h2>
-                  {a.description && (
-                    <p className="text-sm text-gray-500 mt-1">{a.description}</p>
-                  )}
+              <Link href={`/ja/reserve/${a.slug}`} className="block p-6">
+                <div className="flex items-center gap-4">
+                  <div className="text-4xl">{ICONS[a.slug] ?? '📅'}</div>
+                  <div>
+                    <h2 className="font-bold text-lg text-gray-800">{a.name}</h2>
+                    {a.description && (
+                      <p className="text-sm text-gray-500 mt-1">{a.description}</p>
+                    )}
+                  </div>
+                  <span className="ml-auto text-gray-400 shrink-0">→</span>
                 </div>
-                <span className="ml-auto text-gray-400 shrink-0">→</span>
-              </div>
-            </Link>
+              </Link>
+              <Link
+                href={`/ja/services/${a.slug}`}
+                className="block border-t border-gray-100 px-6 py-2.5 text-sm text-sky-600 hover:bg-sky-50"
+              >
+                📄 サービス内容の詳細を見る（施設・入場方法・ご利用の流れ）
+              </Link>
+            </div>
           ))}
         </div>
 
