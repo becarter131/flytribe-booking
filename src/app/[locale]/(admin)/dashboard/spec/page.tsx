@@ -15,19 +15,24 @@ function subscribeNoop() {
 function authedSnapshot(): boolean {
   return !!sessionStorage.getItem('adminPassword')
 }
+function ownerSnapshot(): boolean {
+  return sessionStorage.getItem('ftIsOwner') === '1'
+}
 
 const UPDATED = '2026-07-19'
 
-const TOC = [
-  ['overview', '1. 本書について'],
-  ['requirements', '2. 要件定義'],
-  ['architecture', '3. システム構成'],
-  ['features', '4. 機能仕様'],
-  ['database', '5. データベース設計'],
-  ['api', '6. API一覧'],
-  ['operations', '7. 運用マニュアル'],
-  ['history', '8. 主要な変更履歴'],
-] as const
+// ownerOnly: true の章はオーナーのみ表示（技術情報）。
+// 管理者には業務に必要な章（要件定義・機能仕様・運用マニュアル）だけを表示する
+const SECTIONS: { id: string; label: string; ownerOnly: boolean }[] = [
+  { id: 'overview', label: '本書について', ownerOnly: false },
+  { id: 'requirements', label: '要件定義（予約ルール）', ownerOnly: false },
+  { id: 'architecture', label: 'システム構成', ownerOnly: true },
+  { id: 'features', label: '機能仕様', ownerOnly: false },
+  { id: 'database', label: 'データベース設計', ownerOnly: true },
+  { id: 'api', label: 'API一覧', ownerOnly: true },
+  { id: 'operations', label: '運用マニュアル', ownerOnly: false },
+  { id: 'history', label: '主要な変更履歴', ownerOnly: true },
+]
 
 const ACTIVITIES = [
   ['貸切業務利用（charter）', '1社', '1社', '¥54,000/枚（5枚¥180,000・10枚¥300,000）', '会社単位の貸切。確定日は他区分の予約不可（埋まり表示）'],
@@ -189,10 +194,19 @@ export default function SpecPage() {
   const router = useRouter()
   // 管理画面にログイン済みの場合のみ表示する（未ログインはダッシュボードへ）
   const authed = useSyncExternalStore(subscribeNoop, authedSnapshot, () => false)
+  const isOwner = useSyncExternalStore(subscribeNoop, ownerSnapshot, () => false)
 
   useEffect(() => {
     if (!authed) router.replace('/ja/dashboard')
   }, [authed, router])
+
+  // 表示する章と番号（管理者はオーナー専用章を除いて連番になる）
+  const visible = SECTIONS.filter((s) => isOwner || !s.ownerOnly)
+  const numOf = (id: string) => visible.findIndex((s) => s.id === id) + 1
+  const heading = (id: string) => {
+    const s = SECTIONS.find((x) => x.id === id)
+    return `${numOf(id)}. ${s?.label ?? ''}`
+  }
 
   if (!authed) {
     return (
@@ -209,7 +223,7 @@ export default function SpecPage() {
           ← 管理画面に戻る
         </Link>
         <h1 className="text-2xl font-bold text-gray-800 mt-3 mb-1">
-          フライトライブ予約システム 総合仕様書
+          フライトライブ予約システム {isOwner ? '総合仕様書' : '運用マニュアル'}
         </h1>
         <p className="text-sm text-gray-500 mb-6">
           最終更新: {UPDATED} ／ 対象: AICHI AIR BASE ドローン飛行場予約システム（flytribe-booking.vercel.app）
@@ -219,10 +233,10 @@ export default function SpecPage() {
         <div className={SECTION_CLS}>
           <h2 className={H2_CLS}>目次</h2>
           <ul className="grid sm:grid-cols-2 gap-1 text-sm">
-            {TOC.map(([id, label]) => (
-              <li key={id}>
-                <a href={`#${id}`} className="text-sky-600 hover:underline">
-                  {label}
+            {visible.map((s, i) => (
+              <li key={s.id}>
+                <a href={`#${s.id}`} className="text-sky-600 hover:underline">
+                  {i + 1}. {s.label}
                 </a>
               </li>
             ))}
@@ -231,7 +245,7 @@ export default function SpecPage() {
 
         {/* 1. 本書について */}
         <section id="overview" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>1. 本書について</h2>
+          <h2 className={H2_CLS}>{heading('overview')}</h2>
           <p className={P_CLS}>
             本書はフライトライブ予約システムの要件定義・システム仕様・基本設計・機能仕様・運用手順をまとめた総合仕様書です。
             対象読者は運営管理者（オーナー・管理者）および保守開発者です。
@@ -244,9 +258,9 @@ export default function SpecPage() {
 
         {/* 2. 要件定義 */}
         <section id="requirements" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>2. 要件定義</h2>
+          <h2 className={H2_CLS}>{heading('requirements')}</h2>
 
-          <h3 className={H3_CLS}>2.1 業務要件</h3>
+          <h3 className={H3_CLS}>■ 業務要件</h3>
           <p className={P_CLS}>
             飛行場は1日1組（1区分）のみが利用できる単一資源である。利用形態は以下の3区分で、
             いずれも「事前にチケット（利用券）を購入 → カレンダーから日付を選んで申込 → 管理者の承認で確定」という流れをとる。
@@ -270,7 +284,7 @@ export default function SpecPage() {
             </tbody>
           </table>
 
-          <h3 className={H3_CLS}>2.2 予約確定の要件</h3>
+          <h3 className={H3_CLS}>■ 予約確定の要件</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li>人数が最低催行人数に達しても<strong>自動確定はしない</strong>。管理者の承認操作によってのみ確定する</li>
             <li>承認は最低催行人数到達が条件。同日に他区分が確定済みの場合は承認できない（二重確定の防止）</li>
@@ -278,7 +292,7 @@ export default function SpecPage() {
             <li>当日の申込・当日の承認は可能</li>
           </ul>
 
-          <h3 className={H3_CLS}>2.3 キャンセルポリシー</h3>
+          <h3 className={H3_CLS}>■ キャンセルポリシー</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li>確定前: 利用者は申込をキャンセルできる（チケット自動返却）</li>
             <li>確定後: 利用者都合のキャンセルは不可（システム上も操作をブロック）。キャンセルされた場合チケットは返還されない</li>
@@ -286,7 +300,7 @@ export default function SpecPage() {
             <li>申込時に上記ポリシーの同意ポップアップを表示し、同意した場合のみ申込できる</li>
           </ul>
 
-          <h3 className={H3_CLS}>2.4 非機能要件</h3>
+          <h3 className={H3_CLS}>■ 非機能要件</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
             <li>日本語のみ対応（多言語不要）。スマートフォン・PC 両対応のレスポンシブUI</li>
             <li>個人情報（氏名・連絡先）は管理者のみ閲覧可。パスワードは scrypt でハッシュ化保存</li>
@@ -295,10 +309,11 @@ export default function SpecPage() {
         </section>
 
         {/* 3. システム構成 */}
+        {isOwner && (
         <section id="architecture" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>3. システム構成</h2>
+          <h2 className={H2_CLS}>{heading('architecture')}</h2>
 
-          <h3 className={H3_CLS}>3.1 技術スタック</h3>
+          <h3 className={H3_CLS}>■ 技術スタック</h3>
           <table className={TABLE_CLS}>
             <tbody>
               {[
@@ -319,7 +334,7 @@ export default function SpecPage() {
             </tbody>
           </table>
 
-          <h3 className={H3_CLS}>3.2 環境変数（Vercel に設定・値は本書に記載しない）</h3>
+          <h3 className={H3_CLS}>■ 環境変数（Vercel に設定・値は本書に記載しない）</h3>
           <table className={TABLE_CLS}>
             <tbody>
               {[
@@ -338,12 +353,13 @@ export default function SpecPage() {
             </tbody>
           </table>
         </section>
+        )}
 
         {/* 4. 機能仕様 */}
         <section id="features" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>4. 機能仕様</h2>
+          <h2 className={H2_CLS}>{heading('features')}</h2>
 
-          <h3 className={H3_CLS}>4.1 画面一覧</h3>
+          <h3 className={H3_CLS}>■ 画面一覧</h3>
           <table className={TABLE_CLS}>
             <thead>
               <tr>
@@ -373,7 +389,7 @@ export default function SpecPage() {
             </tbody>
           </table>
 
-          <h3 className={H3_CLS}>4.2 予約の状態遷移</h3>
+          <h3 className={H3_CLS}>■ 予約の状態遷移</h3>
           <p className={P_CLS}>日付×区分ごとの状態は以下の5種類。カレンダー・管理画面で色分け表示される。</p>
           <table className={TABLE_CLS}>
             <thead>
@@ -400,14 +416,14 @@ export default function SpecPage() {
             </tbody>
           </table>
 
-          <h3 className={H3_CLS}>4.3 受付停止の2つの範囲</h3>
+          <h3 className={H3_CLS}>■ 受付停止の2つの範囲</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li><strong>予約一覧から（区分単位）</strong>: その申し込み（区分×日付）だけを停止。承認済みの他区分には影響しない</li>
             <li><strong>カレンダー管理から（日付単位）</strong>: その日の全3区分を一括停止（悪天候などで丸1日止める場合）</li>
             <li>いずれも対象申込のチケットを自動返却し、申込者へメール通知する。停止した申込は一覧にグレーで残り「受付停止を取り消す」で解除できる（取り消された申込自体は復活しない）</li>
           </ul>
 
-          <h3 className={H3_CLS}>4.4 チケット（利用券）仕様</h3>
+          <h3 className={H3_CLS}>■ チケット（利用券）仕様</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li>コードは8桁の小文字英数字（紛らわしい i/l/o/0/1 を除外）。照合は大小文字を区別しない</li>
             <li>有効期限は発行から6ヶ月。予約申込には人数分のコードが必要（同一コードの複数入力で残回数をまとめて消費可）</li>
@@ -416,7 +432,7 @@ export default function SpecPage() {
             <li>返却条件: 確定前キャンセル・受付停止・予約不成立（催行人数未達で日付超過）で自動返却</li>
           </ul>
 
-          <h3 className={H3_CLS}>4.5 認証・権限</h3>
+          <h3 className={H3_CLS}>■ 認証・権限</h3>
           <table className={TABLE_CLS}>
             <thead>
               <tr>
@@ -445,7 +461,7 @@ export default function SpecPage() {
             パスワード再設定はメールで1時間有効の使い捨てリンクを送付（管理者の再設定時は全セッション失効）。
           </p>
 
-          <h3 className={H3_CLS}>4.6 メール通知一覧</h3>
+          <h3 className={H3_CLS}>■ メール通知一覧</h3>
           <table className={TABLE_CLS}>
             <thead>
               <tr>
@@ -465,7 +481,7 @@ export default function SpecPage() {
             </tbody>
           </table>
 
-          <h3 className={H3_CLS}>4.7 定時処理（毎朝9時 日本時間）</h3>
+          <h3 className={H3_CLS}>■ 定時処理（毎朝9時 日本時間）</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
             <li><strong>前日リマインダー</strong>: 明日が確定済みの予約の申込者へ案内メール、管理者へ確定予約サマリー</li>
             <li><strong>期限切れ仮予約の整理</strong>: 確定しないまま日付が過ぎた申込を受付停止にし、チケットを自動返却して申込者へ不成立メールを送信（確定済みの過去予約は対象外）</li>
@@ -473,8 +489,9 @@ export default function SpecPage() {
         </section>
 
         {/* 5. データベース設計 */}
+        {isOwner && (
         <section id="database" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>5. データベース設計</h2>
+          <h2 className={H2_CLS}>{heading('database')}</h2>
           <p className={P_CLS}>
             Supabase（PostgreSQL）。全テーブルに ft_ プレフィックス。新テーブル作成時は
             service_role への権限付与（grant）を忘れないこと（自動付与が効かない環境のため）。
@@ -496,10 +513,12 @@ export default function SpecPage() {
             </div>
           ))}
         </section>
+        )}
 
         {/* 6. API一覧 */}
+        {isOwner && (
         <section id="api" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>6. API一覧</h2>
+          <h2 className={H2_CLS}>{heading('api')}</h2>
           <div className="overflow-x-auto">
             <table className={TABLE_CLS}>
               <thead>
@@ -526,12 +545,13 @@ export default function SpecPage() {
             「オーナー」はオーナー権限のあるセッションのみ許可。
           </p>
         </section>
+        )}
 
         {/* 7. 運用マニュアル */}
         <section id="operations" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>7. 運用マニュアル</h2>
+          <h2 className={H2_CLS}>{heading('operations')}</h2>
 
-          <h3 className={H3_CLS}>7.1 日常の予約管理（最重要）</h3>
+          <h3 className={H3_CLS}>■ 日常の予約管理（最重要）</h3>
           <ol className="list-decimal pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li>新規申込のメール通知を受けたら管理画面の予約一覧を確認する</li>
             <li>最低催行人数に達した申込を「確定にする」で承認（申込者全員と管理者へ自動通知）</li>
@@ -544,14 +564,14 @@ export default function SpecPage() {
             <li>悪天候などで丸1日止める場合はカレンダー管理から「この日を受付停止にする（全区分）」を使う</li>
           </ol>
 
-          <h3 className={H3_CLS}>7.2 チケットの発行・管理</h3>
+          <h3 className={H3_CLS}>■ チケットの発行・管理</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li>通常はショップでの購入時に自動発行される（カード=即時、銀行振込=入金確認後）</li>
             <li>手動発行（特典・補償など）は管理画面のチケット管理から。用途をメモ欄に必ず記載する</li>
             <li>不要になったチケットは無効化できる。残回数0のチケットは表示切替で非表示にできる</li>
           </ul>
 
-          <h3 className={H3_CLS}>7.3 管理者アカウントの管理（オーナーのみ）</h3>
+          <h3 className={H3_CLS}>■ 管理者アカウントの管理（オーナーのみ）</h3>
           <ol className="list-decimal pl-5 text-sm text-gray-700 space-y-1 mb-2">
             <li>オーナーパネルで「＋招待コードを発行」（7日有効・1回のみ使用可）</li>
             <li>コードを新しい管理者に渡し、ログイン画面の「新規登録」タブから登録してもらう</li>
@@ -559,7 +579,7 @@ export default function SpecPage() {
             <li>オーナー権限の追加は「👑付与」から。最後のオーナーは降格・無効化できない</li>
           </ol>
 
-          <h3 className={H3_CLS}>7.4 トラブル対応</h3>
+          <h3 className={H3_CLS}>■ トラブル対応</h3>
           <table className={TABLE_CLS}>
             <thead>
               <tr>
@@ -585,7 +605,7 @@ export default function SpecPage() {
             </tbody>
           </table>
 
-          <h3 className={H3_CLS}>7.5 正式ローンチ前の残タスク</h3>
+          <h3 className={H3_CLS}>■ 正式ローンチ前の残タスク</h3>
           <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
             <li>Vercel Pro プランへの切り替え（商用利用）</li>
             <li>特定商取引法表記・利用規約ページの整備</li>
@@ -596,8 +616,9 @@ export default function SpecPage() {
         </section>
 
         {/* 8. 変更履歴 */}
+        {isOwner && (
         <section id="history" className={SECTION_CLS}>
-          <h2 className={H2_CLS}>8. 主要な変更履歴</h2>
+          <h2 className={H2_CLS}>{heading('history')}</h2>
           <table className={TABLE_CLS}>
             <tbody>
               {[
@@ -618,6 +639,7 @@ export default function SpecPage() {
             機能を変更した際は本書も更新してください。
           </p>
         </section>
+        )}
       </div>
     </main>
   )
