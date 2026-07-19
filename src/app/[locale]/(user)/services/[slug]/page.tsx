@@ -141,10 +141,6 @@ const DETAILS: Record<string, ServiceDetail> = {
   },
 }
 
-export function generateStaticParams() {
-  return Object.keys(DETAILS).map((slug) => ({ slug }))
-}
-
 export default async function ServiceDetailPage({
   params,
 }: {
