@@ -458,7 +458,7 @@ export default function ReserveCalendarPage() {
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold text-gray-800 mb-3">お申し込み前にご確認ください</h2>
             <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg p-4 mb-5">
-              予約は、お申し込み後に管理者の承認をもって確定します。予約確定後は、利用者都合によるキャンセルはできません。天候不良または事業者都合によりキャンセルとなった場合は、チケットを返還し、ご希望に応じて全額返金いたします。
+              予約は、お申し込み後、管理者の承認をもって確定します。予約確定後に利用者都合でキャンセルされた場合、チケットは返還されません。天候不良または事業者都合により利用できない場合は、使用予定のチケットを返還いたします。
             </p>
             <div className="flex gap-3">
               <button
