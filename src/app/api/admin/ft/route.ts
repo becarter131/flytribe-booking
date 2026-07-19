@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { computeOwnState } from '@/lib/ft'
-import { mailBody, sendMail } from '@/lib/notify'
+import { mailBody, notifyAdmins, sendMail } from '@/lib/notify'
 
 // 予約リクエストのある日付の一覧（管理者用）
 export async function GET(req: NextRequest) {
@@ -256,6 +256,20 @@ export async function PATCH(req: NextRequest) {
         )
       }
     }
+
+    // 管理者全員へも通知（誰かが停止したことを共有する）
+    const stoppedNames = targets.map((a) => a.name).join('・')
+    await notifyAdmins(
+      `【受付停止】${date} ${stoppedNames}`,
+      mailBody([
+        `${date} の ${stoppedNames} が受付停止になりました。`,
+        '',
+        `対象範囲: ${scope === 'date' ? '全区分一括（カレンダーから）' : 'この区分のみ（予約一覧から）'}`,
+        `取り消された申込: ${(affected ?? []).length}件（チケットは自動返却済み・申込者へは通知済み）`,
+        '',
+        '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+      ])
+    )
     return NextResponse.json({ ok: true })
   }
 

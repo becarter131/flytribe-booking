@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
+import { mailBody, notifyAdmins } from '@/lib/notify'
 
 const schema = z.object({
   requestId: z.uuid(),
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: request } = await supabaseAdmin
     .from('ft_requests')
-    .select('id, status, coupon_id, activity_id, date')
+    .select('id, status, coupon_id, activity_id, date, party_size, user:ft_users(name, email), activity:ft_activities(name, slug)')
     .eq('id', requestId)
     .eq('user_id', userId)
     .single()
@@ -70,6 +71,25 @@ export async function POST(req: NextRequest) {
         .eq('id', rc.coupon_id)
     }
   }
+
+  // 管理者へ通知（確定前の利用者都合キャンセル）
+  const cancelUser = Array.isArray(request.user) ? request.user[0] : request.user
+  const activity = Array.isArray(request.activity) ? request.activity[0] : request.activity
+  const unit = activity?.slug === 'charter' ? '社' : '名'
+  await notifyAdmins(
+    `【申込キャンセル】${request.date} ${activity?.name ?? '利用区分'}（${request.party_size}${unit}）`,
+    mailBody([
+      '利用者により予約申込がキャンセルされました（確定前）。',
+      '',
+      `日付: ${request.date}`,
+      `利用区分: ${activity?.name ?? '-'}`,
+      `申込者: ${cancelUser?.name ?? '不明'}（${cancelUser?.email ?? '-'}）`,
+      `人数: ${request.party_size}${unit}`,
+      '',
+      '使用されていたチケットは自動返却されています。',
+      '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+    ])
+  )
 
   return NextResponse.json({ cancelled: true })
 }
