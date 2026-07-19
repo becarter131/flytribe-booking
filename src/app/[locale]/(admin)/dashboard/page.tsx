@@ -48,6 +48,7 @@ interface CalActivity {
   id: string
   slug: string
   name: string
+  minParticipants: number
 }
 
 type CalState = 'blank' | 'tentative' | 'confirmed' | 'rejected' | 'occupied'
@@ -68,6 +69,15 @@ const CAL_DOT: Record<CalState, string> = {
   confirmed: 'bg-green-500',
   rejected: 'bg-red-500',
   occupied: 'bg-gray-400',
+}
+
+// カレンダーの「申込数/催行人数」表示の文字色（状態と同じ色分け）
+const CAL_TEXT: Record<CalState, string> = {
+  blank: 'text-gray-500',
+  tentative: 'text-yellow-600',
+  confirmed: 'text-green-600',
+  rejected: 'text-red-500',
+  occupied: 'text-gray-400',
 }
 
 function ymd(d: Date): string {
@@ -983,24 +993,44 @@ export default function DashboardPage() {
                 >
                   <span className="font-medium">{d.getDate()}</span>
                   {!isPast && (
-                    <span className="flex gap-0.5">
-                      {calActivities.map((a) => (
-                        <span
-                          key={a.slug}
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            CAL_DOT[info?.[a.slug]?.state ?? 'blank']
-                          }`}
-                        />
-                      ))}
-                    </span>
+                    <>
+                      {/* 申込のある区分は 申込数/催行人数 を表示（色は状態） */}
+                      {calActivities
+                        .filter((a) => (info?.[a.slug]?.count ?? 0) > 0)
+                        .map((a) => {
+                          const ci = info![a.slug]
+                          return (
+                            <span
+                              key={a.slug}
+                              className={`text-[9px] leading-none font-mono font-semibold ${CAL_TEXT[ci.state]}`}
+                            >
+                              {ci.count}/{a.minParticipants}
+                            </span>
+                          )
+                        })}
+                      {/* 申込のない区分は従来どおり状態の点 */}
+                      <span className="flex gap-0.5">
+                        {calActivities
+                          .filter((a) => (info?.[a.slug]?.count ?? 0) === 0)
+                          .map((a) => (
+                            <span
+                              key={a.slug}
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                CAL_DOT[info?.[a.slug]?.state ?? 'blank']
+                              }`}
+                            />
+                          ))}
+                      </span>
+                    </>
                   )}
                 </button>
               )
             })}
           </div>
           <p className="text-xs text-gray-400 mt-2">
-            ●の色: 灰=空き / 黄=仮予約 / 緑=確定 / 赤=受付停止 / 濃灰=埋まり（左から
-            {calActivities.map((a) => a.name).join('・')}）
+            申込のある区分は「申込数/催行人数」を表示（上から
+            {calActivities.map((a) => a.name).join('・')}の順）。
+            ●は申込のない区分の状態。色: 灰=空き / 黄=仮予約 / 緑=確定 / 赤=受付停止 / 濃灰=埋まり
           </p>
         </div>
 
