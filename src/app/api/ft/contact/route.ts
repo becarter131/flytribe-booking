@@ -3,6 +3,10 @@ import { z } from 'zod'
 import { mailBody, sendMailAs } from '@/lib/notify'
 
 const CONTACT_TO = 'info@flytribe.co.jp'
+// info@ への転送は noreply@ から送る。
+// from と to を同一アドレス（info@→info@）にすると Gmail が迷惑メール判定・破棄することがあるため
+const NOTIFY_FROM = 'フライトライブ予約システム <noreply@flytribe.co.jp>'
+// 問い合わせ者への受付返信は info@ から（返信もそのまま info@ に届く）
 const CONTACT_FROM = 'フライトライブ予約システム <info@flytribe.co.jp>'
 
 const schema = z.object({
@@ -27,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   // info@ への通知（返信先を問い合わせ者にして、そのまま返信できるように）
   await sendMailAs({
-    from: CONTACT_FROM,
+    from: NOTIFY_FROM,
     to: CONTACT_TO,
     replyTo: email,
     subject: `【お問い合わせ】${name} 様より`,
