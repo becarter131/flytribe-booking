@@ -165,11 +165,13 @@ export async function PATCH(req: NextRequest) {
     // その日の申込者全員へ確定メールを送る
     const { data: confirmed } = await supabaseAdmin
       .from('ft_requests')
-      .select('user:ft_users(name, email)')
+      .select('party_size, user:ft_users(name, email)')
       .eq('activity_id', activityId)
       .eq('date', date)
       .eq('status', 'active')
+    let totalCount = 0
     for (const r of confirmed ?? []) {
+      totalCount += r.party_size
       const user = r.user as unknown as { name: string; email: string } | null
       if (!user?.email) continue
       await sendMail(
@@ -183,6 +185,26 @@ export async function PATCH(req: NextRequest) {
         ])
       )
     }
+
+    // 管理者全員へも確定を共有する
+    const { data: approvedActivity } = await supabaseAdmin
+      .from('ft_activities')
+      .select('slug')
+      .eq('id', activityId)
+      .single()
+    const unit = approvedActivity?.slug === 'charter' ? '社' : '名'
+    await notifyAdmins(
+      `【予約確定】${date} ${activityName}（${totalCount}${unit}）`,
+      mailBody([
+        `${date} の ${activityName} が予約確定になりました。`,
+        '',
+        `確定人数: ${totalCount}${unit}（申込 ${(confirmed ?? []).length}件）`,
+        '申込者全員へ確定の通知を送信済みです。',
+        '',
+        '⚠️ 同じ日付に他の申し込みが残っている場合は、必ず受付停止にしてください。',
+        '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+      ])
+    )
     return NextResponse.json({ ok: true })
   }
 
