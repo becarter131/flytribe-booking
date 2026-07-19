@@ -67,6 +67,8 @@ export default function ReserveCalendarPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
   const [myRequests, setMyRequests] = useState<MyRequest[]>([])
+  // 申込前の同意ポップアップ
+  const [showConsent, setShowConsent] = useState(false)
 
   const fetchMonth = useCallback(async () => {
     const res = await fetch(`/api/ft/calendar?year=${year}&month=${month}`)
@@ -113,7 +115,8 @@ export default function ReserveCalendarPage() {
     setSelected(null)
   }
 
-  const submitRequest = async () => {
+  // 申込ボタン: 入力チェックを通ったら同意ポップアップを表示する
+  const submitRequest = () => {
     if (!selected) return
     setApiError(null)
     setMessage(null)
@@ -129,6 +132,16 @@ export default function ReserveCalendarPage() {
       )
       return
     }
+    setShowConsent(true)
+  }
+
+  // 同意ポップアップの「同意して申し込む」で実際に送信する
+  const doSubmit = async () => {
+    if (!selected) return
+    setShowConsent(false)
+    const userId = localStorage.getItem('ftUserId')
+    if (!userId) return
+    const codes = couponCodes.map((c) => c.trim())
     setSubmitting(true)
     try {
       const res = await fetch('/api/ft/requests', {
@@ -438,6 +451,35 @@ export default function ReserveCalendarPage() {
           </div>
         )}
       </div>
+
+      {/* 申込前の同意ポップアップ */}
+      {showConsent && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-bold text-gray-800 mb-3">お申し込み前にご確認ください</h2>
+            <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg p-4 mb-5">
+              予約は、お申し込み後に管理者の承認をもって確定します。予約確定後は、利用者都合によるキャンセルはできません。天候不良または事業者都合によりキャンセルとなった場合は、チケットを返還し、ご希望に応じて全額返金いたします。
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConsent(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg font-semibold hover:bg-gray-50"
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={doSubmit}
+                disabled={submitting}
+                className="flex-1 bg-sky-600 text-white py-2.5 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50"
+              >
+                同意して申し込む
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
