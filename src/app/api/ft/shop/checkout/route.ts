@@ -17,6 +17,20 @@ const schema = z
     message: 'basicItemId か shopProductId のどちらか一方を指定してください',
   })
 
+// Checkout セッション作成に失敗した場合のエラーメッセージ。
+// 銀行振込は Stripe の有効化審査が完了するまで利用できないため、案内を分ける
+function checkoutErrorMessage(paymentMethod: 'card' | 'bank_transfer'): string {
+  return paymentMethod === 'bank_transfer'
+    ? '銀行振込は現在準備中のためご利用いただけません。恐れ入りますが、クレジットカード決済をご利用ください'
+    : '決済ページの作成に失敗しました。時間をおいて再度お試しください'
+}
+
+// 失敗した注文レコードを取り消す（未決済の pending のみ）
+async function discardOrder(orderId: string): Promise<void> {
+  await supabaseAdmin.from('ft_ticket_order_items').delete().eq('order_id', orderId)
+  await supabaseAdmin.from('ft_ticket_orders').delete().eq('id', orderId).eq('status', 'pending')
+}
+
 // 支払い方法ごとの Stripe Checkout 設定
 // 銀行振込は Stripe がバーチャル口座を発行し、入金確認後に webhook（async_payment_succeeded）が届く
 function paymentParams(
@@ -82,25 +96,31 @@ export async function POST(req: NextRequest) {
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      ...paymentParams(paymentMethod),
-      line_items: [
-        {
-          price_data: {
-            currency: 'jpy',
-            product_data: { name: product.name },
-            unit_amount: product.price_jpy,
+    try {
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        ...paymentParams(paymentMethod),
+        line_items: [
+          {
+            price_data: {
+              currency: 'jpy',
+              product_data: { name: product.name },
+              unit_amount: product.price_jpy,
+            },
+            quantity: 1,
           },
-          quantity: 1,
-        },
-      ],
-      customer_email: user.email,
-      metadata: { ftTicketOrderId: order.id },
-      success_url: `${origin0}/ja/shop/success/${order.id}`,
-      cancel_url: `${origin0}/ja/shop`,
-    })
-    return NextResponse.json({ checkoutUrl: session.url }, { status: 201 })
+        ],
+        customer_email: user.email,
+        metadata: { ftTicketOrderId: order.id },
+        success_url: `${origin0}/ja/shop/success/${order.id}`,
+        cancel_url: `${origin0}/ja/shop`,
+      })
+      return NextResponse.json({ checkoutUrl: session.url }, { status: 201 })
+    } catch (e) {
+      console.error('checkout session create failed:', e)
+      await discardOrder(order.id)
+      return NextResponse.json({ error: checkoutErrorMessage(paymentMethod) }, { status: 400 })
+    }
   }
 
   // ===== 講座チケット（基本講習 + 限定解除オプション）の購入 =====
@@ -164,27 +184,33 @@ export async function POST(req: NextRequest) {
   const proto = req.headers.get('x-forwarded-proto') ?? 'http'
   const origin = req.headers.get('origin') ?? `${proto}://${req.headers.get('host')}`
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    ...paymentParams(paymentMethod),
-    line_items: items.map((i) => ({
-      price_data: {
-        currency: 'jpy',
-        product_data: {
-          name:
-            i.item_type === 'basic'
-              ? `講座チケット: ${courseItemLabel(i)}`
-              : `限定解除オプション: ${ITEM_TYPE_LABEL[i.item_type]}`,
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      ...paymentParams(paymentMethod),
+      line_items: items.map((i) => ({
+        price_data: {
+          currency: 'jpy',
+          product_data: {
+            name:
+              i.item_type === 'basic'
+                ? `講座チケット: ${courseItemLabel(i)}`
+                : `限定解除オプション: ${ITEM_TYPE_LABEL[i.item_type]}`,
+          },
+          unit_amount: i.price_jpy,
         },
-        unit_amount: i.price_jpy,
-      },
-      quantity: 1,
-    })),
-    customer_email: user.email,
-    metadata: { ftTicketOrderId: order.id },
-    success_url: `${origin}/ja/shop/success/${order.id}`,
-    cancel_url: `${origin}/ja/shop`,
-  })
+        quantity: 1,
+      })),
+      customer_email: user.email,
+      metadata: { ftTicketOrderId: order.id },
+      success_url: `${origin}/ja/shop/success/${order.id}`,
+      cancel_url: `${origin}/ja/shop`,
+    })
 
-  return NextResponse.json({ checkoutUrl: session.url }, { status: 201 })
+    return NextResponse.json({ checkoutUrl: session.url }, { status: 201 })
+  } catch (e) {
+    console.error('checkout session create failed:', e)
+    await discardOrder(order.id)
+    return NextResponse.json({ error: checkoutErrorMessage(paymentMethod) }, { status: 400 })
+  }
 }
