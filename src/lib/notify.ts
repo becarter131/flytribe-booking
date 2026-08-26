@@ -1,5 +1,6 @@
 import 'server-only'
 import { supabaseAdmin } from '@/lib/supabase'
+import { SITE_URL } from '@/lib/site'
 
 // メール通知（Resend）。RESEND_API_KEY / MAIL_FROM が未設定の間は何もしない。
 // 通知の失敗で予約処理を止めないよう、エラーはすべて握りつぶす
@@ -70,7 +71,7 @@ export async function notifyAdmins(subject: string, text: string): Promise<void>
   await sendMail(emails, subject, text)
 }
 
-const SIGNATURE = '\n\n──\nフライトライブ予約システム\nhttps://flytribe-booking.vercel.app'
+const SIGNATURE = `\n\n──\nフライトライブ予約システム\n${SITE_URL}/booking`
 
 export function mailBody(lines: string[]): string {
   return lines.join('\n') + SIGNATURE

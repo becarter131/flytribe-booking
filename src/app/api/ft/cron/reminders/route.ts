@@ -1,3 +1,4 @@
+import { SITE_URL } from '@/lib/site'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { mailBody, notifyAdmins, sendMail } from '@/lib/notify'
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   if (adminLines.length > 0) {
     await notifyAdmins(
       `【明日の予約】${tomorrow} の確定済み予約のご確認`,
-      mailBody([`明日 ${tomorrow} の確定済み予約は以下のとおりです。`, '', ...adminLines, '', '管理画面: https://flytribe-booking.vercel.app/ja/dashboard'])
+      mailBody([`明日 ${tomorrow} の確定済み予約は以下のとおりです。`, '', ...adminLines, '', `管理画面: ${SITE_URL}/booking/dashboard`])
     )
   }
 

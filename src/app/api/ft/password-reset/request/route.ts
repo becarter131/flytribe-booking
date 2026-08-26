@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const proto = req.headers.get('x-forwarded-proto') ?? 'http'
   const origin = req.headers.get('origin') ?? `${proto}://${req.headers.get('host')}`
-  const url = `${origin}/ja/reset-password?token=${token}`
+  const url = `${origin}/booking/reset-password?token=${token}`
 
   await sendMail(
     account.email,

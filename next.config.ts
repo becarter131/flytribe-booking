@@ -1,18 +1,21 @@
 import type { NextConfig } from 'next'
-import createNextIntlPlugin from 'next-intl/plugin'
-
-const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 const nextConfig: NextConfig = {
   async redirects() {
     return [
+      // 旧URL（/ja プレフィックス時代）からの移行リダイレクト
       {
-        source: '/',
-        destination: '/ja',
-        permanent: false,
+        source: '/ja',
+        destination: '/booking',
+        permanent: true,
+      },
+      {
+        source: '/ja/:path*',
+        destination: '/booking/:path*',
+        permanent: true,
       },
     ]
   },
 }
 
-export default withNextIntl(nextConfig)
+export default nextConfig

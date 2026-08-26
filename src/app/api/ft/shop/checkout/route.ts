@@ -112,8 +112,8 @@ export async function POST(req: NextRequest) {
         ],
         customer_email: user.email,
         metadata: { ftTicketOrderId: order.id },
-        success_url: `${origin0}/ja/shop/success/${order.id}`,
-        cancel_url: `${origin0}/ja/shop`,
+        success_url: `${origin0}/booking/shop/success/${order.id}`,
+        cancel_url: `${origin0}/booking/shop`,
       })
       return NextResponse.json({ checkoutUrl: session.url }, { status: 201 })
     } catch (e) {
@@ -203,8 +203,8 @@ export async function POST(req: NextRequest) {
       })),
       customer_email: user.email,
       metadata: { ftTicketOrderId: order.id },
-      success_url: `${origin}/ja/shop/success/${order.id}`,
-      cancel_url: `${origin}/ja/shop`,
+      success_url: `${origin}/booking/shop/success/${order.id}`,
+      cancel_url: `${origin}/booking/shop`,
     })
 
     return NextResponse.json({ checkoutUrl: session.url }, { status: 201 })

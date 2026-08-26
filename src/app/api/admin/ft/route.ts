@@ -1,3 +1,4 @@
+import { SITE_URL } from '@/lib/site'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -202,7 +203,7 @@ export async function PATCH(req: NextRequest) {
         '申込者全員へ確定の通知を送信済みです。',
         '',
         '⚠️ 同じ日付に他の申し込みが残っている場合は、必ず受付停止にしてください。',
-        '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+        `管理画面: ${SITE_URL}/booking/dashboard`,
       ])
     )
     return NextResponse.json({ ok: true })
@@ -289,7 +290,7 @@ export async function PATCH(req: NextRequest) {
         `対象範囲: ${scope === 'date' ? '全区分一括（カレンダーから）' : 'この区分のみ（予約一覧から）'}`,
         `取り消された申込: ${(affected ?? []).length}件（チケットは自動返却済み・申込者へは通知済み）`,
         '',
-        '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+        `管理画面: ${SITE_URL}/booking/dashboard`,
       ])
     )
     return NextResponse.json({ ok: true })

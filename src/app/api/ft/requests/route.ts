@@ -1,3 +1,4 @@
+import { SITE_URL } from '@/lib/site'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -211,7 +212,7 @@ export async function POST(req: NextRequest) {
       `人数: ${unitLabel}`,
       `この日の合計: ${current + partySize}${unit}（確定の目安: ${activity.min_participants}${unit}〜）`,
       '',
-      '管理画面: https://flytribe-booking.vercel.app/ja/dashboard',
+      `管理画面: ${SITE_URL}/booking/dashboard`,
     ])
   )
 
