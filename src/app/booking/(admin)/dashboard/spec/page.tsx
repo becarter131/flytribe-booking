@@ -19,7 +19,7 @@ function ownerSnapshot(): boolean {
   return sessionStorage.getItem('ftIsOwner') === '1'
 }
 
-const UPDATED = '2026-07-19'
+const UPDATED = '2026-08-26'
 
 // ownerOnly: true の章はオーナーのみ表示（技術情報）。
 // 管理者には業務に必要な章（要件定義・機能仕様・運用マニュアル）だけを表示する
@@ -651,6 +651,7 @@ export default function SpecPage() {
                 ['2026-07-13', 'メール通知の本稼働（Resend・noreply@flytribe.co.jp）'],
                 ['2026-07-18', '管理者アカウントを招待コード制の個別ログインへ刷新'],
                 ['2026-07-19', 'オーナーのフラグ制移行・パスワード再設定・受付停止の2スコープ化（区分単位/日付単位）・停止申込のグレーアウト表示・申込時の同意ポップアップ・カレンダーの申込数表示・通知拡充（確定時管理者通知・前日リマインダー・キャンセル/停止の管理者通知）・期限切れ仮予約の自動整理・本仕様書の作成'],
+                ['2026-08-26', 'flytribe.co.jp 移行準備: 予約システムを /ja/... から /booking/... へ移設（旧URLは301リダイレクト）・ルート / に公式サイトを新設・お知らせ/ブログ機能（ft_posts・公開側 /news・管理は「お知らせ管理」ページ）'],
               ].map(([d, c]) => (
                 <tr key={d}>
                   <th className={`${TH_CLS} w-28 whitespace-nowrap`}>{d}</th>
@@ -660,7 +661,7 @@ export default function SpecPage() {
             </tbody>
           </table>
           <p className="text-xs text-gray-400 mt-4">
-            本仕様書は実装と同じリポジトリで管理されています（src/app/[locale]/(admin)/dashboard/spec/page.tsx）。
+            本仕様書は実装と同じリポジトリで管理されています（src/app/booking/(admin)/dashboard/spec/page.tsx）。
             機能を変更した際は本書も更新してください。
           </p>
         </section>
