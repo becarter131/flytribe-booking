@@ -55,6 +55,9 @@ NEXT_PUBLIC_SITE_URL=https://flytribe.co.jp
 ### 4. 切替後の確認チェックリスト
 
 - [ ] https://flytribe.co.jp/ が公式トップを表示
+- [ ] https://flytribe.co.jp/robots.txt が「Allow」+ sitemap を返す（NEXT_PUBLIC_SITE_URL 設定で自動切替。
+      vercel.app のうちは noindex + Disallow で、移行後の重複インデックスを防いでいる）
+- [ ] Google Search Console に flytribe.co.jp を登録し sitemap.xml を送信
 - [ ] https://flytribe.co.jp/booking が予約システムを表示
 - [ ] 旧URL https://flytribe-booking.vercel.app/ja/shop → /booking/shop にリダイレクト
 - [ ] **メール送受信が正常**（info@flytribe.co.jp でテスト送受信）
