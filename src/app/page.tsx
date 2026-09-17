@@ -32,20 +32,12 @@ export default async function HomePage() {
           ドローンの安全な利活用と人材育成を支えています。
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            href="/booking"
-            className="inline-block bg-sky-700 text-white font-bold rounded-2xl px-8 py-4 shadow-md hover:bg-sky-800 transition-colors"
-          >
-            飛行場のご予約はこちら →
-          </Link>
-          <Link
-            href="/field"
-            className="inline-block bg-white text-sky-800 border border-sky-300 font-bold rounded-2xl px-8 py-4 shadow-sm hover:bg-sky-50 transition-colors"
-          >
-            AICHI AIR BASE 施設案内
-          </Link>
-        </div>
+        <Link
+          href="/booking"
+          className="inline-block bg-sky-700 text-white font-bold rounded-2xl px-8 py-4 shadow-md hover:bg-sky-800 transition-colors"
+        >
+          飛行場のご予約はこちら →
+        </Link>
 
         {/* 最新のお知らせ */}
         {(posts ?? []).length > 0 && (
