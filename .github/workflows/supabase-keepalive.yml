@@ -28,7 +28,10 @@ jobs:
 
       - name: Query Supabase REST (counts as project activity)
         run: |
-          code=$(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 30             -H "apikey: $SUPABASE_ANON_KEY"             -H "Authorization: Bearer $SUPABASE_ANON_KEY"             "$SUPABASE_URL/rest/v1/restaurants?select=id&limit=1")
+          code=$(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/restaurants?select=id&limit=1")
           echo "HTTP $code: $(head -c 200 /tmp/body.txt)"
           # 200 以外（ポーズ中は 521/5xx）は失敗にして GitHub からの通知メールで気付けるようにする
           test "$code" = "200"
